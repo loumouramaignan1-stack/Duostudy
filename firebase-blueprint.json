@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents the user's profile and progress state.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "xp": { "type": "integer" },
+        "gems": { "type": "integer" },
+        "hearts": { "type": "integer" },
+        "streak": { "type": "integer" },
+        "lastActiveDate": { "type": "string" },
+        "completedLessons": { "type": "array" },
+        "spacedRepetition": { "type": "object" },
+        "lessonLevels": { "type": "object" },
+        "nodeStates": { "type": "object" },
+        "seenExercises": { "type": "object" },
+        "examDate": { "type": "string" },
+        "competenceLevel": { "type": "number" },
+        "streakFreezeActive": { "type": "boolean" },
+        "doubleXpActive": { "type": "boolean" }
+      },
+      "required": ["uid", "xp", "gems", "hearts", "streak"]
+    },
+    "Course": {
+      "title": "Course",
+      "properties": {
+        "id": { "type": "string" },
+        "courseName": { "type": "string" },
+        "themeColor": { "type": "string" },
+        "units": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "sourceNotes": { "type": "string" }
+      },
+      "required": ["id", "courseName", "themeColor", "units", "createdAt"],
+      "type": "object",
+      "description": "Represents a course with its units, lessons, and questions."
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile and persistent academic progress tracking."
+    },
+    "users/{userId}/courses/{courseId}": {
+      "schema": "Course",
+      "description": "User specific custom generated or joined courses."
+    }
+  }
+}
