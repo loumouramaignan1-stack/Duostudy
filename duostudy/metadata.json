@@ -1,0 +1,6 @@
+{
+  "name": "DuoStudy",
+  "description": "Préparez vos examens avec l'IA et la répétition espacée, dans un style moderne et ultra-performant !",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
