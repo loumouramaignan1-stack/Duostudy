@@ -669,6 +669,7 @@ function repairGeneratedCurriculum(data: any): any {
   return data;
 }
 
+// API endpoint to generate a personalized courses structure based on notes
 app.post("/api/generate-learning-path", async (req, res) => {
   const { courseTitle, courseNotes, language = "fr", startUnitNumber = 1 } = req.body;
   try {
@@ -714,19 +715,12 @@ app.post("/api/generate-learning-path", async (req, res) => {
       });
     }
 
-    // Safety truncation to avoid huge prompts and serverless invocation failure
-    let activeNotes = (courseNotes || "").trim();
-    if (activeNotes.length > 20000) {
-      console.log(`[Safety Warning] Truncating courseNotes from ${activeNotes.length} to 20000 characters to prevent Vercel serverless function timeout.`);
-      activeNotes = activeNotes.substring(0, 20000) + "\n\n... [Notes tronquées pour des raisons de performance et de vitesse de génération IA] ...";
-    }
-
     const textPrompt = `Veuillez analyser les notes de cours suivantes pour concevoir un programme d'apprentissage complet, progressif et hautement granulaire de style Duolingo.
     
     Titre souhaité : "${courseTitle || "Notes de cours"}"
     Notes de cours :
     ---
-    ${activeNotes}
+    ${courseNotes}
     ---
 
     Directives d'Ingénierie Pédagogique d'Elite (RÈGLES D'OR DUOLINGO ADAPTÉES) :
@@ -761,8 +755,8 @@ app.post("/api/generate-learning-path", async (req, res) => {
     Format de réponse JSON requis :
     1. Structurez le cours en unités (Units) progressives et cohérentes d'après le cours.
     2. Numérotez impérativement la première unité générée avec le numéro : ${startUnitNumber}. Les unités suivantes doivent être incrémentées séquentiellement (${startUnitNumber + 1}, ${startUnitNumber + 2}, ...).
-    3. Chaque cours doit impérativement comporter exactement 3 unités (Units) distinctes, et chaque unité doit obligatoirement comporter exactement 3 leçons (Lessons) spécifiques (soit un total de 9 leçons par cours).
-    4. Chaque leçon (Learning Node) doit comporter une banque d'exercices complète contenant de 3 à 4 questions variées d'angulations différentes évaluant les mêmes concepts fondamentaux sous des formats de typologie multiples ('choice', 'true_false', 'fill', 'match') pour ne pas lasser l'élève. Chaque question doit comporter une explication chaleureuse et pédagogique.
+    3. Chaque cours doit impérativement comporter au moins 3 unités (Units) distinctes, et chaque unité doit obligatoirement comporter au moins 3 leçons (Lessons) spécifiques pour que la progression soit longue et complète.
+    4. Chaque leçon (Learning Node) doit comporter une banque d'exercices complète contenant de 6 à 9 questions variées d'angulations différentes évaluant les mêmes concepts fondamentaux sous des formats de typologie multiples ('choice', 'true_false', 'fill', 'match') pour ne pas lasser l'élève. Chaque question doit comporter une explication chaleureuse et pédagogique.
     5. Rédigez l'ensemble des contenus, questions, explications motivantes et titres en français, avec clarté d'esprit et rigueur scientifique.
     6. Choisissez une couleur thématique appropriée pour ce cours parmi 'emerald', 'sky', 'rose', 'amber', 'indigo', 'violet'.`;
 
@@ -778,7 +772,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
           model: currentModel,
           contents: textPrompt,
           config: {
-            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique, en sciences cognitives, en conception d'évaluations de haut niveau et en conception de parcours d'apprentissage gamifiés interactifs. Votre mission absolue est de décomposer les connaissances de cours fournies en micro-compétences de niveau atomique (un nœud = une seule idée utile), sans aucun saut de difficulté, en appliquant des stratégies d'évaluation variées et ludiques du style de Duolingo, avec impérativement exactement 3 unités, et exactement 3 leçons distinctes par unité (section). Chaque leçon doit générer exactement de 3 à 4 questions pour garantir la vélocité et la complétude.",
+            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique, en sciences cognitives, en conception d'évaluations de haut niveau et en conception de parcours d'apprentissage gamifiés interactifs. Votre mission absolue est de décomposer les connaissances de cours fournies en micro-compétences de niveau atomique (un nœud = une seule idée utile), sans aucun saut de difficulté, en appliquant des stratégies d'évaluation variées et ludiques du style de Duolingo, avec impérativement au minimum 3 unités, et au moins 3 leçons distinctes par unité (section). Chaque question doit de plus avoir son tableau d'options correctement rempli et valide en fonction de son type.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
@@ -790,7 +784,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
                 },
                 units: {
                   type: Type.ARRAY,
-                  description: "Liste d'unités d'apprentissage progressives (exactement 3 unités), chacune ayant obligatoirement exactement 3 leçons distinctes.",
+                  description: "Liste d'unités d'apprentissage progressives (au moins 3 unités), chacune ayant obligatoirement au moins 3 leçons distinctes.",
                   items: {
                     type: Type.OBJECT,
                     properties: {
@@ -799,7 +793,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
                       description: { type: Type.STRING, description: "Objectif court, ex: 'Comprendre la structure anatomique générale'" },
                       lessons: {
                         type: Type.ARRAY,
-                        description: "Chaque unité d'apprentissage doit contenir exactement 3 leçons distinctes.",
+                        description: "Chaque unité d'apprentissage doit contenir au minimum 3 leçons distinctes.",
                         items: {
                           type: Type.OBJECT,
                           properties: {
@@ -809,7 +803,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
                             xp: { type: Type.INTEGER, description: "Nombre de points d'expérience gagnés, ex: 15" },
                             questions: {
                               type: Type.ARRAY,
-                              description: "Une banque d'exercices dynamique contenant de 3 à 4 questions d'angulations complémentaires et de formats variés pour évaluer un même concept/compétence sans risquer de répétition récente ou de monotonie d'exercice.",
+                              description: "Une banque d'exercices dynamique contenant absolument de 6 à 9 questions d'angulations complémentaires et de formats variés pour évaluer un même concept/compétence sans risquer de répétition récente ou de monotonie d'exercice.",
                               items: {
                                 type: Type.OBJECT,
                                 properties: {

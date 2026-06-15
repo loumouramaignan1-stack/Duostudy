@@ -18,7 +18,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && 
+        'email_verified' in request.auth.token &&
         request.auth.token.email_verified == true && 
+        'email' in request.auth.token &&
         (request.auth.token.email == "lou.mouramaignan@gmail.com" || request.auth.token.email == "lou.mouramaignan1@gmail.com");
     }
 
@@ -55,7 +57,7 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if (isOwner(userId) && isValidUser(incoming()) && incoming().uid == existing().uid) || isAdmin();
-      allow delete: if isAdmin(); // Profiles shouldn't be randomly deleted by clients, unless by verified admins
+      allow delete: if isAdmin();
 
       // Match rules for Courses subcollection
       match /courses/{courseId} {
