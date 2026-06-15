@@ -887,4 +887,8 @@ async function initServer() {
   });
 }
 
-initServer();
+if (process.env.VERCEL !== "1") {
+  initServer();
+}
+
+export default app;

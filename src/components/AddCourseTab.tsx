@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { PlusCircle, FileText, Sparkles, Wand2, Compass, AlertTriangle, BookOpenCheck, Upload, Trash2 } from "lucide-react";
 import { Course } from "../types";
 import AdInterstitial from "./AdInterstitial";
+import JSZip from "jszip";
 
 interface AddCourseTabProps {
   onAddCourse: (course: Course) => void;
@@ -91,39 +92,131 @@ export default function AddCourseTab({
       
       reader.onload = async (event) => {
         if (event.target && event.target.result) {
-          const base64Data = event.target.result as string;
+          const arrayBuffer = event.target.result as ArrayBuffer;
           try {
-            const response = await fetch("/api/parse-file", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: file.name,
-                mimeType: file.type,
-                base64: base64Data
-              })
-            });
+            let extractedText = "";
 
-            let result: any = {};
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-              result = await response.json();
+            if (nameLower.endsWith(".pdf")) {
+              // Parse PDF client-side
+              // Load pdf.js dynamically
+              if (!(window as any).pdfjsLib) {
+                await new Promise<void>((resolve, reject) => {
+                  const script = document.createElement("script");
+                  script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js";
+                  script.onload = () => resolve();
+                  script.onerror = () => reject(new Error("Impossible de charger le moteur de lecture PDF depuis le CDN. Vérifiez votre connexion Internet."));
+                  document.head.appendChild(script);
+                });
+              }
+
+              const pdfjsLib = (window as any).pdfjsLib;
+              pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+
+              const bytes = new Uint8Array(arrayBuffer);
+              const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+              let pdfText = "";
+              for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const strings = content.items.map((item: any) => item.str);
+                pdfText += strings.join(" ") + "\n";
+              }
+              extractedText = pdfText;
+            } else if (nameLower.endsWith(".pptx")) {
+              // Parse PPTX client-side
+              const zip = await JSZip.loadAsync(arrayBuffer);
+              const slideFiles = Object.keys(zip.files).filter(p => p.startsWith("ppt/slides/slide"));
+              slideFiles.sort((a, b) => {
+                const numA = parseInt(a.replace(/[^0-9]/g, "")) || 0;
+                const numB = parseInt(b.replace(/[^0-9]/g, "")) || 0;
+                return numA - numB;
+              });
+
+              let pptxText = "";
+              for (const slidePath of slideFiles) {
+                const content = await zip.file(slidePath)?.async("string");
+                if (content) {
+                  const matches = content.match(/<a:t[^>]*>(.*?)<\/a:t>/g) || [];
+                  const slideText = matches.map(m => m.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")).join(" ");
+                  if (slideText.trim().length > 0) {
+                    pptxText += slideText + "\n";
+                  }
+                }
+              }
+              extractedText = pptxText;
+            } else if (nameLower.endsWith(".docx")) {
+              // Parse DOCX client-side
+              const zip = await JSZip.loadAsync(arrayBuffer);
+              const docXml = await zip.file("word/document.xml")?.async("string");
+              if (docXml) {
+                const matches = docXml.match(/<w:t[^>]*>(.*?)<\/w:t>/g) || [];
+                extractedText = matches.map(m => m.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")).join(" ");
+              }
+            } else if (nameLower.endsWith(".xlsx")) {
+              // Parse XLSX client-side
+              const zip = await JSZip.loadAsync(arrayBuffer);
+              const sharedStringsXml = await zip.file("xl/sharedStrings.xml")?.async("string");
+              if (sharedStringsXml) {
+                const matches = sharedStringsXml.match(/<t[^>]*>(.*?)<\/t>/g) || [];
+                extractedText = matches.map(m => m.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")).join(" ");
+              }
             } else {
-              const textOutput = await response.text();
-              throw new Error(textOutput || `Le serveur a renvoyé un statut d'erreur ${response.status}`);
+              // Fallback to server for other format types
+              throw new Error("back_end_fallback");
             }
 
-            if (!response.ok) {
-              throw new Error(result.error || "Impossible d'extraire le texte de ce diaporama.");
-            }
-            if (result.text && result.text.trim().length > 0) {
-              setCourseNotes(result.text);
-              setSuccessMsg(`✅ Diaporama/document "${file.name}" importé et lu avec succès !`);
+            if (extractedText && extractedText.trim().length > 0) {
+              setCourseNotes(extractedText);
+              setSuccessMsg(`✅ Document "${file.name}" importé et lu avec succès !`);
             } else {
-              setErrorMessage(`⚠️ Le diaporama "${file.name}" a été lu mais aucun texte n'a pu en être extrait.`);
+              setErrorMessage(`⚠️ Le document "${file.name}" a été lu mais aucun texte n'a pu en être extrait.`);
             }
           } catch (err: any) {
-            console.error("Erreur d'extraction :", err);
-            setErrorMessage(`❌ Erreur lors de l'extraction des diapositives : ${err.message || "Vérifiez le fichier."}`);
+            console.warn("Client-side parsing failed or bypassed, trying server fallback...", err);
+            
+            // Try to fall back to the server API
+            try {
+              const base64Data = await new Promise<string>((resolve, reject) => {
+                const b64Reader = new FileReader();
+                b64Reader.onload = () => {
+                  resolve(b64Reader.result as string);
+                };
+                b64Reader.onerror = reject;
+                b64Reader.readAsDataURL(file);
+              });
+
+              const response = await fetch("/api/parse-file", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: file.name,
+                  mimeType: file.type,
+                  base64: base64Data
+                })
+              });
+
+              let result: any = {};
+              const contentType = response.headers.get("content-type");
+              if (contentType && contentType.includes("application/json")) {
+                result = await response.json();
+              } else {
+                const textOutput = await response.text();
+                throw new Error(textOutput || `Le serveur a renvoyé un statut d'erreur ${response.status}`);
+              }
+
+              if (!response.ok) {
+                throw new Error(result.error || "Impossible d'extraire le texte de ce diaporama.");
+              }
+              if (result.text && result.text.trim().length > 0) {
+                setCourseNotes(result.text);
+                setSuccessMsg(`✅ Diaporama/document "${file.name}" importé et lu avec succès (via serveur) !`);
+              } else {
+                setErrorMessage(`⚠️ Le diaporama "${file.name}" a été lu mais aucun texte n'a pu en être extrait.`);
+              }
+            } catch (subErr: any) {
+              console.error("Both client-side and fallback parsing failed:", subErr);
+              setErrorMessage(`❌ Erreur lors de l'extraction des diapositives : ${subErr.message || "Vérifiez le fichier."}`);
+            }
           } finally {
             setParsingFile(false);
           }
@@ -135,7 +228,7 @@ export default function AddCourseTab({
         setParsingFile(false);
       };
       
-      reader.readAsDataURL(file);
+      reader.readAsArrayBuffer(file);
     } else {
       // Plain text formats (.txt, .md, .json)
       setParsingFile(true);
