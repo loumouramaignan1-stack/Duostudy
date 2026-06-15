@@ -1,11 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Global safety net (Default Deny)
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
     // Helper functions
     function isSignedIn() {
@@ -17,15 +12,16 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && 
-        'email_verified' in request.auth.token &&
-        request.auth.token.email_verified == true && 
-        'email' in request.auth.token &&
-        (request.auth.token.email == "lou.mouramaignan@gmail.com" || request.auth.token.email == "lou.mouramaignan1@gmail.com");
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        (
+          request.auth.token.email == "lou.mouramaignan@gmail.com" ||
+          request.auth.token.email == "lou.mouramaignan1@gmail.com"
+        );
     }
 
     function isValidId(id) {
-       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
@@ -36,34 +32,18 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Validation functions
-    function isValidUser(data) {
-      return data.uid == request.auth.uid
-        && data.xp is int
-        && data.gems is int
-        && data.hearts is int
-        && data.streak is int;
-    }
-
-    function isValidCourse(data) {
-      return data.id is string
-        && data.courseName is string
-        && data.themeColor is string
-        && data.units is list;
-    }
-
-    // Match rules for Users collection
+    // USERS
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if (isOwner(userId) && isValidUser(incoming()) && incoming().uid == existing().uid) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
 
-      // Match rules for Courses subcollection
+      // COURSES
       match /courses/{courseId} {
         allow read: if isOwner(userId) || isAdmin();
-        allow create: if (isOwner(userId) && isValidCourse(incoming()) && isValidId(courseId)) || isAdmin();
-        allow update: if (isOwner(userId) && isValidCourse(incoming()) && isValidId(courseId) && incoming().id == existing().id) || isAdmin();
+        allow create: if isOwner(userId) && isValidId(courseId);
+        allow update: if isOwner(userId) && isValidId(courseId);
         allow delete: if isOwner(userId) || isAdmin();
       }
     }
