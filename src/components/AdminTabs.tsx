@@ -52,6 +52,22 @@ export default function AdminTabs({ user, activeTab, onSystemRefresh }: AdminTab
   const [systemAlertMessage, setSystemAlertMessage] = useState("🎉 Promo de mi-saison : Obtenez 50% de réduction sur l'offre VIP !");
   const [isAlertActive, setIsAlertActive] = useState(true);
 
+  // Google AdSense settings states
+  const [adsenseClientInput, setAdsenseClientInput] = useState(() => localStorage.getItem("duostudy_adsense_client") || "ca-pub-8162271832525640");
+  const [adsenseSlotInput, setAdsenseSlotInput] = useState(() => localStorage.getItem("duostudy_adsense_slot") || "1234567890");
+  const [isAdsenseSaved, setIsAdsenseSaved] = useState(false);
+
+  const handleSaveAdsense = () => {
+    localStorage.setItem("duostudy_adsense_client", adsenseClientInput);
+    localStorage.setItem("duostudy_adsense_slot", adsenseSlotInput);
+    setIsAdsenseSaved(true);
+    setTimeout(() => setIsAdsenseSaved(false), 3000);
+    handleTestGAEvent("admin_update_adsense", { client: adsenseClientInput, slot: adsenseSlotInput });
+    if (onSystemRefresh) {
+      onSystemRefresh();
+    }
+  };
+
   const currentUserEmail = user?.email || "";
   const isAuthorized = currentUserEmail && (
     currentUserEmail.toLowerCase() === "lou.mouramaignan@gmail.com" || 
@@ -597,8 +613,62 @@ export default function AdminTabs({ user, activeTab, onSystemRefresh }: AdminTab
 
             </div>
 
-            {/* Custom domain mapping & deployment guide (Page 2 second column) */}
-            <div className="bg-white border-2 border-[#E5E5E5] rounded-3xl p-6 shadow-sm space-y-5">
+            {/* Colonne latérale : Configuration Pubs & Domaine */}
+            <div className="space-y-6 col-span-1 animate-fade-in">
+              
+              {/* Configuration Google AdSense */}
+              <div className="bg-white border-2 border-[#E5E5E5] rounded-3xl p-6 shadow-sm space-y-4">
+                <h3 className="font-black text-sm text-slate-850 font-display uppercase tracking-wider flex items-center gap-2">
+                  <span className="text-xl">💰</span> Configuration AdSense
+                </h3>
+                
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Personnalisez l'identifiant Éditeur AdSense et les blocs de publicités d'affichage (ad slots) qui s'affichent pour les utilisateurs dans leur espace de cours, boutique ou écrans de transition.
+                </p>
+
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">
+                      Code Éditeur AdSense (Publisher ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={adsenseClientInput}
+                      onChange={(e) => setAdsenseClientInput(e.target.value)}
+                      placeholder="ca-pub-XXXXXXXXXXXXXXXX"
+                      className="w-full px-3 py-2 bg-[#FAFAFA] border-2 border-gray-200 focus:border-slate-400 rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">
+                      Identifiant du Bloc (Ad Slot ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={adsenseSlotInput}
+                      onChange={(e) => setAdsenseSlotInput(e.target.value)}
+                      placeholder="XXXXXXXXXX"
+                      className="w-full px-3 py-2 bg-[#FAFAFA] border-2 border-gray-200 focus:border-slate-400 rounded-xl text-xs font-mono font-bold focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveAdsense}
+                    className="w-full py-2 bg-[#58cc02] hover:bg-[#61df02] active:translate-y-0.5 text-white text-xs font-black rounded-xl border-b-4 border-[#388301] uppercase tracking-wider transition-all cursor-pointer text-center"
+                  >
+                    {isAdsenseSaved ? "✓ Paramètres enregistrés !" : "Enregistrer les paramètres"}
+                  </button>
+                </div>
+
+                <div className="text-[10px] text-gray-400 bg-slate-50 p-3 rounded-xl border border-slate-100 italic space-y-1">
+                  <p>🛸 **Note d'indexation** : Les robots d'exploration AdSense ne peuvent pas analyser les dossiers sous authentification d'eux-mêmes.</p>
+                  <p className="font-semibold text-slate-600">Pour la validation : Allez dans votre console AdSense &gt; Paramètres &gt; Accès du robot, créez un compte étudiant test et transmettez-le !</p>
+                </div>
+              </div>
+
+              {/* Custom domain mapping & deployment guide (Page 2 second column) */}
+              <div className="bg-white border-2 border-[#E5E5E5] rounded-3xl p-6 shadow-sm space-y-5">
               <h3 className="font-black text-sm text-slate-850 font-display uppercase tracking-wider flex items-center gap-2">
                 <Globe className="w-5 h-5 text-sky-500" /> Nom de Domaine Perso
               </h3>
@@ -650,8 +720,9 @@ export default function AdminTabs({ user, activeTab, onSystemRefresh }: AdminTab
                 </p>
               </div>
             </div>
-
           </div>
+
+        </div>
         </div>
       )}
 

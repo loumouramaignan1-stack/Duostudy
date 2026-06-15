@@ -18,7 +18,7 @@ interface AdBlockProps {
 export default function AdBlock({ type = "horizontal", slot = "1234567890", client }: AdBlockProps) {
   // Check if no-ads is bought or active
   const [noAdsEnabled, setNoAdsEnabled] = useState(false);
-  const [adsenseClient, setAdsenseClient] = useState("ca-pub-9419139201931831"); // Default or local storage
+  const [adsenseClient, setAdsenseClient] = useState("ca-pub-8162271832525640"); // Default client is updated with user's pub ID
   const [adsenseSlot, setAdsenseSlot] = useState(slot);
   const [isAdBlockerActive, setIsAdBlockerActive] = useState(false);
 
@@ -39,7 +39,7 @@ export default function AdBlock({ type = "horizontal", slot = "1234567890", clie
     }
 
     // Read stored AdSense credentials
-    let currentClient = "ca-pub-9419139201931831";
+    let currentClient = "ca-pub-8162271832525640";
     const storedClient = localStorage.getItem("duostudy_adsense_client");
     if (storedClient) {
       setAdsenseClient(storedClient);

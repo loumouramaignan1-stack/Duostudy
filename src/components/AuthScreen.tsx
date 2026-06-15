@@ -20,6 +20,9 @@ export default function AuthScreen() {
   const [resetSent, setResetSent] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
+  // Check if inside AI Studio preview iframe sandbox
+  const isIframe = typeof window !== "undefined" && window.self !== window.top;
+
   // Email/Password login or registration
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,6 +253,25 @@ export default function AuthScreen() {
               </svg>
               <span>Se connecter avec Google</span>
             </button>
+
+            {isIframe && (
+              <div className="w-full mt-3 p-3.5 bg-sky-50 border border-sky-200 rounded-2xl text-[11px] text-sky-700 leading-normal">
+                <div className="font-extrabold flex items-center gap-1.5 uppercase tracking-wider mb-1 text-[10px] text-sky-600">
+                  💡 Astuce de l'Aperçu (Iframe)
+                </div>
+                <p className="font-semibold text-slate-700">
+                  La connexion Google est restreinte par le navigateur au sein de l'iframe de l'éditeur AI Studio.
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  <p>
+                    👉 <strong className="font-bold text-sky-950">Option Simple</strong> : Créez un compte par e-mail ci-dessus (les adresses fictives fonctionnent parfaitement !).
+                  </p>
+                  <p>
+                    👉 <strong className="font-bold text-sky-950">Avec Google</strong> : Rendez-vous sur votre site en ouvrant un <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-sky-900 duration-100">nouvel onglet ↗</a> pour vous connecter sans aucune restriction.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="mt-6 text-center">
               <button
