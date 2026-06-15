@@ -389,6 +389,31 @@ function generateFallbackSyllabus(courseTitle: string, courseNotes: string, star
   };
 }
 
+function parseCleanJSON(text: string): any {
+  let cleanText = text.trim();
+  
+  // Remove markdown code block wraps if present
+  if (cleanText.startsWith("```")) {
+    const lines = cleanText.split("\n");
+    if (lines[0].startsWith("```")) {
+      lines.shift();
+    }
+    if (lines[lines.length - 1].startsWith("```")) {
+      lines.pop();
+    }
+    cleanText = lines.join("\n").trim();
+  }
+  
+  // Additional safety if there's any prefix/suffix before/after the JSON object
+  const startIdx = cleanText.indexOf("{");
+  const endIdx = cleanText.lastIndexOf("}");
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    cleanText = cleanText.substring(startIdx, endIdx + 1);
+  }
+  
+  return JSON.parse(cleanText);
+}
+
 function repairGeneratedCurriculum(data: any): any {
   if (!data || typeof data !== "object") return data;
   
@@ -846,7 +871,20 @@ app.post("/api/generate-learning-path", async (req, res) => {
       throw new Error("Aucune réponse générée par l'IA.");
     }
 
-    let data = JSON.parse(resultText.trim());
+    let data;
+    try {
+      data = parseCleanJSON(resultText);
+    } catch (parseErr: any) {
+      console.warn("Direct JSON.parse failed. Retrying with loose regex JSON extraction...", parseErr);
+      const jsonStart = resultText.indexOf("{");
+      const jsonEnd = resultText.lastIndexOf("}");
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        const extracted = resultText.substring(jsonStart, jsonEnd + 1);
+        data = JSON.parse(extracted);
+      } else {
+        throw parseErr;
+      }
+    }
     data = repairGeneratedCurriculum(data);
     return res.json({ success: true, data });
 

@@ -331,7 +331,14 @@ export default function AddCourseTab({
         }),
       });
 
-      const result = await response.json();
+      let result: any = {};
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        result = await response.json();
+      } else {
+        const textOutput = await response.text();
+        throw new Error(textOutput || `Le serveur a renvoyé un statut d'erreur ${response.status}`);
+      }
 
       if (!response.ok) {
         throw new Error(result.error || "Une erreur est survenue lors de la communication avec le serveur.");
