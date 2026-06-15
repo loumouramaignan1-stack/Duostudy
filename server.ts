@@ -919,7 +919,29 @@ async function initServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+// Serve static assets out of the client app
+async function initServer() {
+  if (process.env.NODE_ENV !== "production") {
+    // Importation dynamique uniquement ici !
+    const { createServer: createViteServer } = await import("vite");
+    
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
 
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[ExamSprint Web Server] running on http://localhost:${PORT}`);
+  });
+}
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[ExamSprint Web Server] running on http://localhost:${PORT}`);
   });
