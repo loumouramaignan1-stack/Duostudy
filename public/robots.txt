@@ -1,8 +1,0 @@
-# https://www.robotstxt.org/
-# Configuration pour DuoStudy.fr
-
-User-agent: *
-Allow: /
-
-# Liens vers le plan du site (Sitemap) pour Google, Bing, etc.
-Sitemap: https://duostudy.fr/sitemap.xml
