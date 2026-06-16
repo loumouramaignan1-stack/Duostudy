@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -761,8 +762,8 @@ app.post("/api/generate-learning-path", async (req, res) => {
 
     let response;
     let attempts = 0;
-    const maxAttempts = 5;
-    let currentModel = "gemini-1.5-flash";
+    const maxAttempts = 3;
+    let currentModel = "gemini-2.5-flash";
 
     while (attempts < maxAttempts) {
       try {
@@ -844,22 +845,36 @@ app.post("/api/generate-learning-path", async (req, res) => {
         attempts++;
         console.error(`Attempt ${attempts} failed with error:`, err);
         
+        // Fast-fail on API key errors to avoid holding slot and hitting serverless timeouts
+        const errMsg = String(err.message || "").toLowerCase();
+        if (
+          errMsg.includes("key_invalid") || 
+          errMsg.includes("not valid") || 
+          errMsg.includes("invalid key") || 
+          errMsg.includes("api key") || 
+          err.status === 400 || 
+          err.statusCode === 400
+        ) {
+          console.warn("Permanent API key error detected. Skipping retries and falling back instantly.");
+          throw err;
+        }
+
         if (attempts >= maxAttempts) {
           throw err;
         }
 
         // On failure, cycle through the best available models
-        if (currentModel === "gemini-3.5-flash") {
-          currentModel = "gemini-flash-latest";
-          console.log(`Encountered error on gemini-3.5-flash. Switching to model ${currentModel} for next attempt.`);
+        if (currentModel === "gemini-2.5-flash") {
+          currentModel = "gemini-1.5-flash";
+          console.log(`Encountered error on gemini-2.5-flash. Switching to model ${currentModel} for next attempt.`);
         } else if (currentModel === "gemini-1.5-flash") {
           currentModel = "gemini-1.5-flash";
-          console.log(`Encountered error on gemini-flash-latest. Switching to model ${currentModel} for next attempt.`);
+          console.log(`Encountered error on gemini-1.5-flash. Retrying check...`);
         } else {
           console.log(`Retrying with ${currentModel}...`);
         }
 
-        const delayMs = attempts * 1500;
+        const delayMs = attempts * 1000;
         console.log(`Waiting ${delayMs}ms before retrying...`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
@@ -903,10 +918,10 @@ app.post("/api/generate-learning-path", async (req, res) => {
   }
 });
 
+// Serve static assets out of the client app
 async function initServer() {
   if (process.env.NODE_ENV !== "production") {
-    const { createServer: createDynamicViteServer } = await import("vite");
-    const vite = await createDynamicViteServer({
+    const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
