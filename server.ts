@@ -215,28 +215,24 @@ function generateQuestionsForSentences(sentenceList: string[]): any[] {
     if (typeVal === 0) {
       questions.push({
         type: "true_false",
-        question: `D'après le cours, l'affirmation suivante est-elle correcte ?\n\n« ${s} »`,
+        question: `Exploration de cours : Est-il VRAI que : "${s}" ?`,
         options: ["Vrai", "Faux"],
         answer: "Vrai",
-        explanation: `En effet ! Votre cours confirme précisément que : « ${s} »`
+        explanation: `Félicitations ! Vos fiches indiquent précisément : "${s}"`
       });
     } else if (typeVal === 1) {
       let altered = s;
       if (s.includes(" est ")) altered = s.replace(" est ", " n'est pas forcément ");
-      else if (s.includes(" de ")) altered = s.replace(" de ", " sans lien direct avec de ");
-      else if (s.includes(" et ")) altered = s.replace(" et ", " sans toutefois inclure ");
+      else if (s.includes(" de ")) altered = s.replace(" de ", " sans aucun lien avec de ");
+      else if (s.includes(" et ")) altered = s.replace(" et ", " sans exclure ni ");
       else altered = s + " (affirmation erronée)";
-
-      let altered2 = s;
-      if (s.includes(".")) altered2 = s.replace(".", " (cette règle comporte néanmoins des exceptions majeures).");
-      else altered2 = s + " (seulement dans de très rares cas d'études).";
 
       questions.push({
         type: "choice",
-        question: `Laquelle des affirmations suivantes décrit correctement une notion clé du cours ?`,
-        options: [s, altered, altered2],
+        question: `Laquelle de ces propositions concorde le mieux avec vos fiches de révision ?`,
+        options: [s, altered, "Ce point n'est pas mentionné dans les slides"],
         answer: s,
-        explanation: `Excellent choix. Le cours enseigne cette notion : « ${s} »`
+        explanation: `Tout à fait! Vos cours soulignent : "${s}"`
       });
     } else {
       const words = s.split(/\s+/).filter(w => w.length > 5);
@@ -246,9 +242,9 @@ function generateQuestionsForSentences(sentenceList: string[]): any[] {
           const blanked = s.replace(targetWord, "_______");
           questions.push({
             type: "fill",
-            question: `Quel mot clé complète correctement cet énoncé ?\n\n« ${blanked} »`,
+            question: `Complétez le blank : "${blanked}"`,
             answer: targetWord,
-            explanation: `Bien vu ! Le terme manquant était "${targetWord}". Phrase complète : « ${s} »`
+            explanation: `Bien vu ! Le mot clé manquant était "${targetWord}". Phrase complète : "${s}"`
           });
           continue;
         }
@@ -258,8 +254,8 @@ function generateQuestionsForSentences(sentenceList: string[]): any[] {
         type: "match",
         question: s,
         options: [],
-        answer: "Concept clé du cours à mémoriser",
-        explanation: "Félicitations, vous avez parfaitement validé et intégré cette notion !"
+        answer: "Notion essentielle extraite des fiches à mémoriser",
+        explanation: "Correct ! Cette flashcard valide un point clé du cours."
       });
     }
   }
@@ -745,9 +741,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
          * La bonne réponse ne doit JAMAIS être identifiable grâce à sa longueur ou son degré de détail supérieur.
          * Les distracteurs ne doivent jamais être absurdes, drôles, vides, ou évidents à éliminer. Ne générez JAMAIS d'option vide ou de valeur inutile comme 'Autre option incorrecte'.
          * Évitez tout indice grammatical involontaire dans l'énoncé.
-         * NE générez JAMAIS d'énoncés méta-textuels génériques ou paresseux comme « Laquelle de ces propositions concorde le mieux avec vos fiches de révision ? », « D'après vos fiches de révision / diapositives... » ou « Exploration de cours : est-il vrai que ». Chaque question doit être une vraie question directe et technique de cours, 100% contextualisée d'après la notion enseignée (par exemple : « Quel mécanisme permet d'assurer la divulgation nulle ? », « Dans quel cas de figure applique-t-on le concept X ? » ou « Quelle affirmation concernant la structure de Y est exacte ? »).
        - OBLIGATIONS :
-         * Posez de vraies questions et exercices personnalisés au sujet direct du cours plutôt que des formulations génériques d'évaluation.
          * Toutes les propositions d'options doivent avoir une longueur similaire.
          * Toutes les propositions doivent sembler extrêmement plausibles à un élève n'ayant pas assimilé la notion (erreurs fréquentes, confusion de termes voisins).
          * Une seule proposition doit être scientifiquement/pédagogiquement correcte.
@@ -778,7 +772,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
           model: currentModel,
           contents: textPrompt,
           config: {
-            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique, en sciences cognitives, en conception d'évaluations de haut niveau et en conception de parcours d'apprentissage gamifiés interactifs. Votre mission absolue est de décomposer les connaissances de cours fournies en micro-compétences de niveau atomique (un nœud = une seule idée utile), sans aucun saut de difficulté, en appliquant des stratégies d'évaluation variées et ludiques du style de Duolingo, avec impérativement au minimum 3 unités, et au moins 3 leçons distinctes par unité (section). Chaque question doit de plus avoir son tableau d'options correctement rempli et valide en fonction de son type. Interdiction absolue de formuler des questions méta-génériques du style 'Laquelle concorde le mieux avec vos fiches de révisions' ou 'Est-il vrai d'après les notes'. Posez des questions concrètes, directes et techniques adaptées précisément au sujet.",
+            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique, en sciences cognitives, en conception d'évaluations de haut niveau et en conception de parcours d'apprentissage gamifiés interactifs. Votre mission absolue est de décomposer les connaissances de cours fournies en micro-compétences de niveau atomique (un nœud = une seule idée utile), sans aucun saut de difficulté, en appliquant des stratégies d'évaluation variées et ludiques du style de Duolingo, avec impérativement au minimum 3 unités, et au moins 3 leçons distinctes par unité (section). Chaque question doit de plus avoir son tableau d'options correctement rempli et valide en fonction de son type.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
