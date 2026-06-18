@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -214,24 +215,28 @@ function generateQuestionsForSentences(sentenceList: string[]): any[] {
     if (typeVal === 0) {
       questions.push({
         type: "true_false",
-        question: `Exploration de cours : Est-il VRAI que : "${s}" ?`,
+        question: `D'après le cours, l'affirmation suivante est-elle correcte ?\n\n« ${s} »`,
         options: ["Vrai", "Faux"],
         answer: "Vrai",
-        explanation: `Félicitations ! Vos fiches indiquent précisément : "${s}"`
+        explanation: `En effet ! Votre cours confirme précisément que : « ${s} »`
       });
     } else if (typeVal === 1) {
       let altered = s;
       if (s.includes(" est ")) altered = s.replace(" est ", " n'est pas forcément ");
-      else if (s.includes(" de ")) altered = s.replace(" de ", " sans aucun lien avec de ");
-      else if (s.includes(" et ")) altered = s.replace(" et ", " sans exclure ni ");
+      else if (s.includes(" de ")) altered = s.replace(" de ", " sans lien direct avec de ");
+      else if (s.includes(" et ")) altered = s.replace(" et ", " sans toutefois inclure ");
       else altered = s + " (affirmation erronée)";
+
+      let altered2 = s;
+      if (s.includes(".")) altered2 = s.replace(".", " (cette règle comporte néanmoins des exceptions majeures).");
+      else altered2 = s + " (seulement dans de très rares cas d'études).";
 
       questions.push({
         type: "choice",
-        question: `Laquelle de ces propositions concorde le mieux avec vos fiches de révision ?`,
-        options: [s, altered, "Ce point n'est pas mentionné dans les slides"],
+        question: `Laquelle des affirmations suivantes décrit correctement une notion clé du cours ?`,
+        options: [s, altered, altered2],
         answer: s,
-        explanation: `Tout à fait! Vos cours soulignent : "${s}"`
+        explanation: `Excellent choix. Le cours enseigne cette notion : « ${s} »`
       });
     } else {
       const words = s.split(/\s+/).filter(w => w.length > 5);
@@ -241,9 +246,9 @@ function generateQuestionsForSentences(sentenceList: string[]): any[] {
           const blanked = s.replace(targetWord, "_______");
           questions.push({
             type: "fill",
-            question: `Complétez le blank : "${blanked}"`,
+            question: `Quel mot clé complète correctement cet énoncé ?\n\n« ${blanked} »`,
             answer: targetWord,
-            explanation: `Bien vu ! Le mot clé manquant était "${targetWord}". Phrase complète : "${s}"`
+            explanation: `Bien vu ! Le terme manquant était "${targetWord}". Phrase complète : « ${s} »`
           });
           continue;
         }
@@ -253,8 +258,8 @@ function generateQuestionsForSentences(sentenceList: string[]): any[] {
         type: "match",
         question: s,
         options: [],
-        answer: "Notion essentielle extraite des fiches à mémoriser",
-        explanation: "Correct ! Cette flashcard valide un point clé du cours."
+        answer: "Concept clé du cours à mémoriser",
+        explanation: "Félicitations, vous avez parfaitement validé et intégré cette notion !"
       });
     }
   }
@@ -740,7 +745,9 @@ app.post("/api/generate-learning-path", async (req, res) => {
          * La bonne réponse ne doit JAMAIS être identifiable grâce à sa longueur ou son degré de détail supérieur.
          * Les distracteurs ne doivent jamais être absurdes, drôles, vides, ou évidents à éliminer. Ne générez JAMAIS d'option vide ou de valeur inutile comme 'Autre option incorrecte'.
          * Évitez tout indice grammatical involontaire dans l'énoncé.
+         * NE générez JAMAIS d'énoncés méta-textuels génériques ou paresseux comme « Laquelle de ces propositions concorde le mieux avec vos fiches de révision ? », « D'après vos fiches de révision / diapositives... » ou « Exploration de cours : est-il vrai que ». Chaque question doit être une vraie question directe et technique de cours, 100% contextualisée d'après la notion enseignée (par exemple : « Quel mécanisme permet d'assurer la divulgation nulle ? », « Dans quel cas de figure applique-t-on le concept X ? » ou « Quelle affirmation concernant la structure de Y est exacte ? »).
        - OBLIGATIONS :
+         * Posez de vraies questions et exercices personnalisés au sujet direct du cours plutôt que des formulations génériques d'évaluation.
          * Toutes les propositions d'options doivent avoir une longueur similaire.
          * Toutes les propositions doivent sembler extrêmement plausibles à un élève n'ayant pas assimilé la notion (erreurs fréquentes, confusion de termes voisins).
          * Une seule proposition doit être scientifiquement/pédagogiquement correcte.
@@ -755,14 +762,14 @@ app.post("/api/generate-learning-path", async (req, res) => {
     1. Structurez le cours en unités (Units) progressives et cohérentes d'après le cours.
     2. Numérotez impérativement la première unité générée avec le numéro : ${startUnitNumber}. Les unités suivantes doivent être incrémentées séquentiellement (${startUnitNumber + 1}, ${startUnitNumber + 2}, ...).
     3. Chaque cours doit impérativement comporter au moins 3 unités (Units) distinctes, et chaque unité doit obligatoirement comporter au moins 3 leçons (Lessons) spécifiques pour que la progression soit longue et complète.
-    4. Chaque leçon (Learning Node) doit comporter une banque d'exercices complète contenant de 6 à 9 questions variées d'angulations différentes évaluant les mêmes concepts fondamentaux sous des formats de typologie multiples ('choice', 'true_false', 'fill', 'match') pour ne pas lasser l'élève. Chaque question doit comporter une explication chaleureuse et pédagogique.
+    4. Chaque leçon (Learning Node) doit comporter une banque d'exercices complète contenant de 12 à 15 questions variées, de formulations reformulées sous des angles diversifiés, proposant des exercices différents pour des notions similaires sous des formats de typologie multiples ('choice', 'true_false', 'fill', 'match') pour ne pas lasser l'élève, diversifier l'expérience utilisateur et assurer un apprentissage en profondeur. Chaque question doit comporter une explication chaleureuse et pédagogique.
     5. Rédigez l'ensemble des contenus, questions, explications motivantes et titres en français, avec clarté d'esprit et rigueur scientifique.
     6. Choisissez une couleur thématique appropriée pour ce cours parmi 'emerald', 'sky', 'rose', 'amber', 'indigo', 'violet'.`;
 
     let response;
     let attempts = 0;
     const maxAttempts = 3;
-    let currentModel = "gemini-3.5-flash";
+    let currentModel = "gemini-2.5-flash";
 
     while (attempts < maxAttempts) {
       try {
@@ -771,7 +778,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
           model: currentModel,
           contents: textPrompt,
           config: {
-            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique, en sciences cognitives, en conception d'évaluations de haut niveau et en conception de parcours d'apprentissage gamifiés interactifs. Votre mission absolue est de décomposer les connaissances de cours fournies en micro-compétences de niveau atomique (un nœud = une seule idée utile), sans aucun saut de difficulté, en appliquant des stratégies d'évaluation variées et ludiques du style de Duolingo, avec impérativement au minimum 3 unités, et au moins 3 leçons distinctes par unité (section). Chaque question doit de plus avoir son tableau d'options correctement rempli et valide en fonction de son type.",
+            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique, en sciences cognitives, en conception d'évaluations de haut niveau et en conception de parcours d'apprentissage gamifiés interactifs. Votre mission absolue est de décomposer les connaissances de cours fournies en micro-compétences de niveau atomique (un nœud = une seule idée utile), sans aucun saut de difficulté, en appliquant des stratégies d'évaluation variées et ludiques du style de Duolingo, avec impérativement au minimum 3 unités, et au moins 3 leçons distinctes par unité (section). Chaque leçon doit impérativement disposer d'une banque d'exercices complète contenant au moins 12 à 15 questions. Chaque question doit de plus avoir son tableau d'options correctement rempli et valide en fonction de son type. Interdiction absolue de formuler des questions méta-génériques du style 'Laquelle concorde le mieux avec vos fiches de révisions' ou 'Est-il vrai d'après les notes'. Posez des questions concrètes, directes et techniques adaptées précisément au sujet.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
@@ -802,7 +809,7 @@ app.post("/api/generate-learning-path", async (req, res) => {
                             xp: { type: Type.INTEGER, description: "Nombre de points d'expérience gagnés, ex: 15" },
                             questions: {
                               type: Type.ARRAY,
-                              description: "Une banque d'exercices dynamique contenant absolument de 6 à 9 questions d'angulations complémentaires et de formats variés pour évaluer un même concept/compétence sans risquer de répétition récente ou de monotonie d'exercice.",
+                              description: "Une banque d'exercices dynamique contenant absolument de 12 à 15 questions d'angulations complémentaires, de formulations ultra-diversifiées de notions similaires et de formats variés pour évaluer un même concept/compétence sans risquer de répétition récente ou de monotonie d'exercice.",
                               items: {
                                 type: Type.OBJECT,
                                 properties: {
@@ -863,12 +870,12 @@ app.post("/api/generate-learning-path", async (req, res) => {
         }
 
         // On failure, cycle through the best available models
-        if (currentModel === "gemini-3.5-flash") {
-          currentModel = "gemini-flash-latest";
-          console.log(`Encountered error on gemini-3.5-flash. Switching to model ${currentModel} for next attempt.`);
-        } else if (currentModel === "gemini-flash-latest") {
-          currentModel = "gemini-3.1-flash-lite";
-          console.log(`Encountered error on gemini-flash-latest. Switching to model ${currentModel} for next attempt.`);
+        if (currentModel === "gemini-2.5-flash") {
+          currentModel = "gemini-1.5-flash";
+          console.log(`Encountered error on gemini-2.5-flash. Switching to model ${currentModel} for next attempt.`);
+        } else if (currentModel === "gemini-1.5-flash") {
+          currentModel = "gemini-1.5-flash";
+          console.log(`Encountered error on gemini-1.5-flash. Retrying check...`);
         } else {
           console.log(`Retrying with ${currentModel}...`);
         }
@@ -920,8 +927,6 @@ app.post("/api/generate-learning-path", async (req, res) => {
 // Serve static assets out of the client app
 async function initServer() {
   if (process.env.NODE_ENV !== "production") {
-    // Import dynamique : Vite n'est chargé qu'en développement, jamais en production
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
