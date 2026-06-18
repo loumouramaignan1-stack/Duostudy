@@ -268,37 +268,14 @@ export function getBestNextActivity(
 export function getQuestionId(question: Question, lessonId?: string): string {
   if ((question as any).id) return (question as any).id;
   const baseText = question.question || "";
+  const prefix = lessonId ? `${lessonId}_` : "";
   let hash = 0;
   for (let i = 0; i < baseText.length; i++) {
     const char = baseText.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32bit integer
   }
-  return `${Math.abs(hash)}`;
-}
-
-export function getLegacyPrefixedQuestionId(question: Question, lessonId: string): string {
-  if ((question as any).id) return `${lessonId}_${(question as any).id}`;
-  const baseText = question.question || "";
-  let hash = 0;
-  for (let i = 0; i < baseText.length; i++) {
-    const char = baseText.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return `${lessonId}_${Math.abs(hash)}`;
-}
-
-export function getLessonTargetLevel(lesson: Lesson | undefined | null): number {
-  if (!lesson || !lesson.questions || lesson.questions.length === 0) return 4;
-  const count = lesson.questions.length;
-  if (count <= 4) {
-    return 2; // scale to 2 levels (halves) if very few questions
-  } else if (count <= 7) {
-    return 3; // scale to 3 levels (thirds) if moderate questions
-  } else {
-    return 4; // scale to 4 levels (quarters) if plenty of questions
-  }
+  return `${prefix}${Math.abs(hash)}`;
 }
 
 export function findSimilarityScore(q1: Question, q2: Question): number {
@@ -397,23 +374,13 @@ export function buildDynamicSessionQuestions(
   // Banque d'exercices + Tirage Aléatoire Contrôlé :
   // Prioritize unseen, then low performance, then oldest seen questions, with active cooling periods
   const poolQuestions = startingLesson.questions || [];
-  
-  // Set to false to strictly restrict this session to the current lesson's own questions,
-  // preventing any outside concept injection when studying a specific learning path.
-  const allowCrossLessonInjections = false;
-
-  const requiredExercises = allowCrossLessonInjections
-    ? Math.min(poolQuestions.length, Math.max(3, Math.ceil(poolQuestions.length * 0.6)))
-    : poolQuestions.length;
+  const requiredExercises = Math.min(poolQuestions.length, Math.max(3, Math.ceil(poolQuestions.length * 0.6)));
 
   const sortedPool = [...poolQuestions].sort((a, b) => {
-    const aIdGlobal = getQuestionId(a);
-    const bIdGlobal = getQuestionId(b);
-    const aIdLegacy = getLegacyPrefixedQuestionId(a, startingLesson.id);
-    const bIdLegacy = getLegacyPrefixedQuestionId(b, startingLesson.id);
-
-    const aRecord = userProgress.seenExercises?.[aIdGlobal] || userProgress.seenExercises?.[aIdLegacy];
-    const bRecord = userProgress.seenExercises?.[bIdGlobal] || userProgress.seenExercises?.[bIdLegacy];
+    const aId = getQuestionId(a, startingLesson.id);
+    const bId = getQuestionId(b, startingLesson.id);
+    const aRecord = userProgress.seenExercises?.[aId];
+    const bRecord = userProgress.seenExercises?.[bId];
 
     // Compute temporal penalty for very recent evaluations
     const getTemporalPriority = (record: any) => {
@@ -427,8 +394,8 @@ export function buildDynamicSessionQuestions(
           return 100000 + (12 - hoursSinceSeen) * 10000;
         }
       } else {
-        // Failed answer: 2 minutes guard to avoid immediate repetition on click restart
-        if (hoursSinceSeen < 0.03) {
+        // Failed answer: 3 minutes guard to avoid immediate repetition on click restart
+        if (hoursSinceSeen < 0.05) {
           return 50000;
         }
       }
@@ -447,7 +414,7 @@ export function buildDynamicSessionQuestions(
     if (aRecord && !bRecord) return 1;
     if (!aRecord && !bRecord) {
       // both unseen: randomize slightly but stably using coordinates
-      return Math.sin(aIdGlobal.length) - Math.cos(bIdGlobal.length);
+      return Math.sin(aId.length) - Math.cos(bId.length);
     }
 
     // 2. Lower score first
@@ -471,32 +438,13 @@ export function buildDynamicSessionQuestions(
     c.units.some((u) => u.lessons.some((l) => l.id === startingLesson.id))
   );
 
-  if (allowCrossLessonInjections && currentCourse) {
+  if (currentCourse) {
     currentCourse.units.forEach((unit) => {
       unit.lessons.forEach((lesson) => {
         if (lesson.id === startingLesson.id) return;
   
         const state = userProgress.nodeStates?.[lesson.id];
         lesson.questions.forEach((q) => {
-          // Exclure les questions sous période de refroidissement (cooldown) d'autres leçons
-          const qIdGlobal = getQuestionId(q);
-          const qIdLegacy = getLegacyPrefixedQuestionId(q, lesson.id);
-          const record = userProgress.seenExercises?.[qIdGlobal] || userProgress.seenExercises?.[qIdLegacy];
-          
-          if (record) {
-            const lastSeenTime = new Date(record.lastSeen).getTime();
-            const hoursSinceSeen = (now.getTime() - lastSeenTime) / (1000 * 60 * 60);
-            if (record.score >= 1.0) {
-              if (hoursSinceSeen < 12) {
-                return; // Ignorer entièrement cette question car elle est verrouillée (réussite récente)
-              }
-            } else {
-              if (hoursSinceSeen < 0.05) {
-                return; // Ignorer cette question car l'échec est trop récent
-              }
-            }
-          }
-
           const item = { q, lesson, courseName: currentCourse.courseName };
           if (state) {
             const recall = calculateRecallProbability(state, now);
@@ -521,8 +469,11 @@ export function buildDynamicSessionQuestions(
   const adaptedStarting = startingQuestions.map((q) => {
     let aq = { ...q };
     if (aq.options && aq.options.length > 2) {
-      // Toujours garder la totalité des options/distracteurs générés pour garantir la difficulté maximale
-      aq.options = [...aq.options].sort(() => Math.random() - 0.5);
+      if (currentCompetence < 0.75) {
+        aq.options = [aq.answer, ...aq.options.filter(o => o !== aq.answer).slice(0, 2)].sort(() => Math.random() - 0.5);
+      } else if (currentCompetence > 1.3 && aq.options.length === 3) {
+        aq.options = [...aq.options].sort(() => Math.random() - 0.5);
+      }
     }
     return aq;
   });
@@ -537,7 +488,7 @@ export function buildDynamicSessionQuestions(
   let fragileIdx = 0;
   let simIdx = 0;
 
-  while (finalQuestions.length < actualTargetLength && allowCrossLessonInjections) {
+  while (finalQuestions.length < actualTargetLength) {
     let addedAny = false;
 
     if (reviewIdx < shuffledReviews.length && finalQuestions.length < actualTargetLength) {
@@ -548,7 +499,7 @@ export function buildDynamicSessionQuestions(
         originalLessonId: item.lesson.id,
         originalLessonTitle: item.lesson.title,
         originalCourseName: item.courseName,
-        question: item.q.question
+        question: `🧠 [RÉVISION PLANIFIÉE] ${item.q.question}`
       });
       addedAny = true;
     }
