@@ -16,7 +16,7 @@ import { initGA4, logGA4PageView, setGA4UserContext } from "./utils/analytics";
 
 import { Course, Lesson, Question, UserProgress, LeaderboardUser, ShopItem, SpacedRepetitionData } from "./types";
 import { DEFAULT_COURSES, INITIAL_LEADERBOARD, INITIAL_SHOP, calculateSM2, getAdaptationForLevel } from "./data";
-import { updateNodeState, getBestNextActivity, buildDynamicSessionQuestions, calculateUserCompetenceRating } from "./utils/pedagogy";
+import { updateNodeState, getBestNextActivity, buildDynamicSessionQuestions, calculateUserCompetenceRating, getLessonTargetLevel } from "./utils/pedagogy";
 import { Menu, X, Gem, Heart, Trophy, BookOpen } from "lucide-react";
 
 import { auth, db, handleFirestoreError, OperationType } from "./firebase";
@@ -589,7 +589,15 @@ export default function App() {
 
       // Compute lesson levels update
       const currentLevel = prev.lessonLevels?.[srsUpdated.lessonId] ?? (prev.completedLessons.includes(srsUpdated.lessonId) ? 1 : 0);
-      const nextLevel = Math.min(4, currentLevel + 1);
+      
+      // Get dynamic lesson target level
+      let targetLevel = 4;
+      const foundLesson = courses.flatMap(c => c.units).flatMap(u => u.lessons).find(l => l.id === srsUpdated.lessonId);
+      if (foundLesson) {
+        targetLevel = getLessonTargetLevel(foundLesson);
+      }
+      
+      const nextLevel = Math.min(targetLevel, currentLevel + 1);
       const newLevels = {
         ...(prev.lessonLevels || {}),
         [srsUpdated.lessonId]: nextLevel
