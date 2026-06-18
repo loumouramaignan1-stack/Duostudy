@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { Course, Lesson, SpacedRepetitionData, NodeKnowledgeState, UserProgress } from "../types";
 import { BookOpen, Check, Lock, Play, Star, AlertCircle, HelpCircle, FileText, ChevronRight, Calendar, Sparkles, Brain, Award, X } from "lucide-react";
-import { calculateRecallProbability, getDecayedMastery, predictExamScore, getQuestionId } from "../utils/pedagogy";
+import { calculateRecallProbability, getDecayedMastery, predictExamScore, getQuestionId, getLessonTargetLevel } from "../utils/pedagogy";
 
 interface LearnPathProps {
   course: Course | null;
@@ -73,16 +73,21 @@ export default function LearnPath({
 
   // Determine if a lesson is unlocked or locked
   const getLessonStatus = (lessonId: string, precedingLessonIds: string[]) => {
-    // Current level of this lesson (from 0 to 4)
-    const level = lessonLevels[lessonId] ?? (completedLessons.includes(lessonId) ? 1 : 0);
-    const isCompleted = level >= 4;
+    const lesson = course?.units.flatMap((u) => u.lessons).find((l) => l.id === lessonId);
+    const targetLevel = getLessonTargetLevel(lesson);
     
-    // It's unlocked if it is the very first lesson, OR if the preceding lesson level is >= 4 (fully completed/mastered)
+    // Current level of this lesson (from 0 to targetLevel)
+    const level = lessonLevels[lessonId] ?? (completedLessons.includes(lessonId) ? 1 : 0);
+    const isCompleted = level >= targetLevel;
+    
+    // It's unlocked if it is the very first lesson, OR if the preceding lesson level is >= priorTargetLevel (fully completed/mastered)
     let isUnlocked = precedingLessonIds.length === 0;
     if (precedingLessonIds.length > 0) {
       const priorLessonId = precedingLessonIds[precedingLessonIds.length - 1];
+      const priorLesson = course?.units.flatMap((u) => u.lessons).find((l) => l.id === priorLessonId);
+      const priorTargetLevel = getLessonTargetLevel(priorLesson);
       const priorLevel = lessonLevels[priorLessonId] ?? (completedLessons.includes(priorLessonId) ? 1 : 0);
-      isUnlocked = priorLevel >= 4;
+      isUnlocked = priorLevel >= priorTargetLevel;
     }
 
     // Is it due for a spaced repetition review?
@@ -365,6 +370,7 @@ export default function LearnPath({
                 {unit.lessons.map((lesson, lIdx) => {
                   const priorLessonIds = getPrecedingLessons(lesson.id);
                   const { isCompleted, isUnlocked, needsReview, level } = getLessonStatus(lesson.id, priorLessonIds);
+                  const targetLevel = getLessonTargetLevel(lesson);
 
                   // Button appearance based on status
                   let buttonClass = "";
@@ -399,7 +405,7 @@ export default function LearnPath({
                           <Star className="w-5.5 h-5.5 text-white fill-white" />
                         </div>
                       );
-                      nodeColorLabel = level > 0 ? `Niveau ${level}/4` : "Unité active";
+                      nodeColorLabel = level > 0 ? `Niveau ${level}/${targetLevel}` : "Unité active";
                     }
                   } else {
                     // Locked grey button
@@ -439,7 +445,7 @@ export default function LearnPath({
                               stroke={isCompleted ? "#FFD700" : (course.themeColor === "sky" ? "#1CB0F6" : "#58CC02")}
                               strokeWidth="10"
                               strokeDasharray="289.0"
-                              strokeDashoffset={289.0 - (Math.min(level, 4) / 4) * 289.0}
+                              strokeDashoffset={289.0 - (Math.min(level, targetLevel) / targetLevel) * 289.0}
                               strokeLinecap="round"
                               className="transition-all duration-500 ease-out"
                             />
@@ -496,15 +502,15 @@ export default function LearnPath({
 
                           <div className="relative z-10 w-full flex flex-col items-center">
                             <span className="text-[10px] font-black uppercase tracking-wider opacity-85 break-words whitespace-normal w-full">
-                              {level === 4 ? "👑 Niveau Maître Complété" : `🎯 LEÇON ${level + 1} SUR 4`}
+                              {level >= targetLevel ? "👑 Niveau Maître Complété" : `🎯 LEÇON ${level + 1} SUR ${targetLevel}`}
                             </span>
                             <h4 className="font-gray-900 font-extrabold text-xs sm:text-sm tracking-wide font-display mt-1 mb-1.5 text-white leading-tight break-words whitespace-normal w-full">
                               {lesson.title}
                             </h4>
                             <p className="text-[10px] sm:text-[11px] opacity-90 leading-tight mb-3 break-words whitespace-normal w-full">
-                              {level === 4 
+                              {level >= targetLevel 
                                 ? "Félicitations, vous avez maîtrisé ce concept à 100% ! Rejouez pour réviser." 
-                                : `Progresse de 25% supplémentaires vers l'ouverture du prochain nœud !`}
+                                : `Progresse de ${Math.round(100 / targetLevel)}% supplémentaires vers l'ouverture du prochain nœud !`}
                             </p>
 
 
@@ -521,7 +527,7 @@ export default function LearnPath({
                                 className={`w-full py-2.5 bg-white ${themeColors.themeText} hover:bg-slate-50 active:translate-y-0.5 border-b-4 border-gray-300 rounded-xl font-black text-xs transition-all uppercase tracking-widest cursor-pointer shadow-md flex items-center justify-center gap-1.5`}
                               >
                                 <Play className="w-4 h-4 fill-current" strokeWidth={4} />
-                                {level === 4 ? "Rejouer (+15 XP)" : "COMMENCER +15 XP"}
+                                {level >= targetLevel ? "Rejouer (+15 XP)" : "COMMENCER +15 XP"}
                               </button>
                             )}
                           </div>
