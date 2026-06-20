@@ -1,6 +1,6 @@
 import express from "express";
 import path from "path";
-
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -875,10 +875,10 @@ app.post("/api/generate-learning-path", async (req, res) => {
 
         // On failure, cycle through the best available models
         if (currentModel === "gemini-2.5-flash") {
-          currentModel = "gemini-2.0-flash";
+          currentModel = "gemini-1.5-flash";
           console.log(`Encountered error on gemini-2.5-flash. Switching to model ${currentModel} for next attempt.`);
-        } else if (currentModel === "gemini-2.0-flash") {
-          currentModel = "gemini-2.0-flash";
+        } else if (currentModel === "gemini-1.5-flash") {
+          currentModel = "gemini-1.5-flash";
           console.log(`Encountered error on gemini-1.5-flash. Retrying check...`);
         } else {
           console.log(`Retrying with ${currentModel}...`);
@@ -931,7 +931,6 @@ app.post("/api/generate-learning-path", async (req, res) => {
 // Serve static assets out of the client app
 async function initServer() {
   if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
