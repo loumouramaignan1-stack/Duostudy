@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -926,8 +927,6 @@ app.post("/api/generate-learning-path", async (req, res) => {
 // Serve static assets out of the client app
 async function initServer() {
   if (process.env.NODE_ENV !== "production") {
-    // Import dynamique : Vite n'est jamais chargé en production (évite l'erreur Rollup sur Vercel)
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
