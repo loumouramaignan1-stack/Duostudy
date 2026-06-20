@@ -268,14 +268,37 @@ export function getBestNextActivity(
 export function getQuestionId(question: Question, lessonId?: string): string {
   if ((question as any).id) return (question as any).id;
   const baseText = question.question || "";
-  const prefix = lessonId ? `${lessonId}_` : "";
   let hash = 0;
   for (let i = 0; i < baseText.length; i++) {
     const char = baseText.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32bit integer
   }
-  return `${prefix}${Math.abs(hash)}`;
+  return `${Math.abs(hash)}`;
+}
+
+export function getLegacyPrefixedQuestionId(question: Question, lessonId: string): string {
+  if ((question as any).id) return `${lessonId}_${(question as any).id}`;
+  const baseText = question.question || "";
+  let hash = 0;
+  for (let i = 0; i < baseText.length; i++) {
+    const char = baseText.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return `${lessonId}_${Math.abs(hash)}`;
+}
+
+export function getLessonTargetLevel(lesson: Lesson | undefined | null): number {
+  if (!lesson || !lesson.questions || lesson.questions.length === 0) return 4;
+  const count = lesson.questions.length;
+  if (count <= 4) {
+    return 2; // scale to 2 levels (halves) if very few questions
+  } else if (count <= 7) {
+    return 3; // scale to 3 levels (thirds) if moderate questions
+  } else {
+    return 4; // scale to 4 levels (quarters) if plenty of questions
+  }
 }
 
 export function findSimilarityScore(q1: Question, q2: Question): number {
@@ -371,177 +394,105 @@ export function buildDynamicSessionQuestions(
     }
   }
 
-  // Banque d'exercices + Tirage Aléatoire Contrôlé :
-  // Prioritize unseen, then low performance, then oldest seen questions, with active cooling periods
+  // Pool of available exercises
   const poolQuestions = startingLesson.questions || [];
-  const requiredExercises = Math.min(poolQuestions.length, Math.max(3, Math.ceil(poolQuestions.length * 0.6)));
+  let sessionLen = Math.min(actualTargetLength, poolQuestions.length);
 
-  const sortedPool = [...poolQuestions].sort((a, b) => {
-    const aId = getQuestionId(a, startingLesson.id);
-    const bId = getQuestionId(b, startingLesson.id);
-    const aRecord = userProgress.seenExercises?.[aId];
-    const bRecord = userProgress.seenExercises?.[bId];
+  // Partition questions into completely unseen (new) and previously seen
+  const unseenPool: Question[] = [];
+  const seenPool: { q: Question; lastSeenTime: number; score: number }[] = [];
 
-    // Compute temporal penalty for very recent evaluations
-    const getTemporalPriority = (record: any) => {
-      if (!record) return 0; // high priority for unseen
-      const lastSeenTime = new Date(record.lastSeen).getTime();
-      const hoursSinceSeen = (now.getTime() - lastSeenTime) / (1000 * 60 * 60);
-
-      if (record.score >= 1.0) {
-        // Correct answer: 12h cooldown period
-        if (hoursSinceSeen < 12) {
-          return 100000 + (12 - hoursSinceSeen) * 10000;
-        }
-      } else {
-        // Failed answer: 3 minutes guard to avoid immediate repetition on click restart
-        if (hoursSinceSeen < 0.05) {
-          return 50000;
-        }
-      }
-      return 0;
-    };
-
-    const aPenalty = getTemporalPriority(aRecord);
-    const bPenalty = getTemporalPriority(bRecord);
-
-    if (aPenalty !== bPenalty) {
-      return aPenalty - bPenalty;
+  poolQuestions.forEach((q) => {
+    const qIdGlobal = getQuestionId(q);
+    const qIdLegacy = getLegacyPrefixedQuestionId(q, startingLesson.id);
+    const record = userProgress.seenExercises?.[qIdGlobal] || userProgress.seenExercises?.[qIdLegacy];
+    
+    if (!record) {
+      unseenPool.push(q);
+    } else {
+      seenPool.push({
+        q,
+        lastSeenTime: new Date(record.lastSeen || 0).getTime(),
+        score: record.score ?? 0
+      });
     }
-
-    // 1. Unseen first
-    if (!aRecord && bRecord) return -1;
-    if (aRecord && !bRecord) return 1;
-    if (!aRecord && !bRecord) {
-      // both unseen: randomize slightly but stably using coordinates
-      return Math.sin(aId.length) - Math.cos(bId.length);
-    }
-
-    // 2. Lower score first
-    if (aRecord.score !== bRecord.score) {
-      return aRecord.score - bRecord.score;
-    }
-
-    // 3. Oldest seen first
-    const aTime = new Date(aRecord.lastSeen).getTime();
-    const bTime = new Date(bRecord.lastSeen).getTime();
-    return aTime - bTime;
   });
 
-  const startingQuestions = sortedPool.slice(0, requiredExercises);
+  // Shuffle unseen pool to make the sequence randomized and fresh
+  const shuffledUnseen = [...unseenPool].sort(() => Math.random() - 0.5);
 
-  const possibleReviews: { q: Question; lesson: Lesson; courseName: string }[] = [];
-  const possibleFragile: { q: Question; lesson: Lesson; courseName: string }[] = [];
-  const otherSims: { q: Question; lesson: Lesson; courseName: string }[] = [];
+  // Sort seen pool by lastSeenTime ascending (oldest-seen is first, which maximizes freshness/cooldown)
+  const sortedSeen = [...seenPool].sort((a, b) => {
+    if (a.lastSeenTime !== b.lastSeenTime) {
+      return a.lastSeenTime - b.lastSeenTime;
+    }
+    return a.score - b.score;
+  });
 
-  const currentCourse = courses.find((c) =>
-    c.units.some((u) => u.lessons.some((l) => l.id === startingLesson.id))
-  );
+  // 1. Get current level and target level
+  const currentLevel = userProgress.lessonLevels?.[startingLesson.id] ?? (userProgress.completedLessons.includes(startingLesson.id) ? 1 : 0);
+  const targetLevel = getLessonTargetLevel(startingLesson);
+  const isCompleted = currentLevel >= targetLevel;
 
-  if (currentCourse) {
-    currentCourse.units.forEach((unit) => {
-      unit.lessons.forEach((lesson) => {
-        if (lesson.id === startingLesson.id) return;
-  
-        const state = userProgress.nodeStates?.[lesson.id];
-        lesson.questions.forEach((q) => {
-          const item = { q, lesson, courseName: currentCourse.courseName };
-          if (state) {
-            const recall = calculateRecallProbability(state, now);
-            if (recall <= 0.70) {
-              possibleReviews.push(item);
-            } else if (state.mastery < 65 || state.failureCount > state.successCount) {
-              possibleFragile.push(item);
-            } else {
-              otherSims.push(item);
-            }
-          } else {
-            otherSims.push(item);
-          }
-        });
-      });
-    });
+  let unseenToTake = 0;
+
+  if (isCompleted || unseenPool.length === 0) {
+    // If completed or all questions are seen, we simply deliver a review session from the seen pool
+    unseenToTake = 0;
+  } else {
+    // 2. Distribute unseen questions evenly across the remaining levels
+    // while strictly ensuring that at least 70% of the session's exercises are brand new.
+    const remainingLevels = Math.max(1, targetLevel - currentLevel);
+    const unseenPerLevelIdeal = Math.max(1, Math.ceil(unseenPool.length / remainingLevels));
+    
+    let targetUnseen = unseenPerLevelIdeal;
+    const calculatedSessionLen = Math.floor(targetUnseen / 0.70);
+
+    if (calculatedSessionLen < sessionLen) {
+      // Not enough unseen questions left to keep 70% unseen with a full 10-question session,
+      // so we dynamically adapt the session length to be shorter (at least 5 questions)
+      sessionLen = Math.max(5, Math.min(sessionLen, calculatedSessionLen));
+      targetUnseen = Math.min(unseenPool.length, Math.ceil(sessionLen * 0.70));
+    } else {
+      // Plenty of unseen questions! We can do a full session of size sessionLen
+      targetUnseen = Math.min(unseenPool.length, Math.max(Math.ceil(sessionLen * 0.70), targetUnseen));
+    }
+
+    unseenToTake = targetUnseen;
   }
 
-  let finalQuestions: Question[] = [];
+  const selectedQuestions: Question[] = [];
 
-  const currentLevel = userProgress.lessonLevels?.[startingLesson.id] ?? (userProgress.completedLessons.includes(startingLesson.id) ? 1 : 0);
-  const adaptedStarting = startingQuestions.map((q) => {
+  // Add the unseen / brand new exercises first
+  for (let i = 0; i < unseenToTake && i < shuffledUnseen.length; i++) {
+    selectedQuestions.push(shuffledUnseen[i]);
+  }
+
+  // If the unseen questions do not fill the full session, fill with the oldest seen questions first
+  let remainingNeeded = sessionLen - selectedQuestions.length;
+  for (let i = 0; i < remainingNeeded && i < sortedSeen.length; i++) {
+    selectedQuestions.push(sortedSeen[i].q);
+  }
+
+  // Fallback: if we still need questions because the seen reservoir is small or empty, fill with extra unseen
+  if (selectedQuestions.length < sessionLen) {
+    const extraNeeded = sessionLen - selectedQuestions.length;
+    const extraUnseenAvailable = shuffledUnseen.slice(unseenToTake);
+    for (let i = 0; i < extraNeeded && i < extraUnseenAvailable.length; i++) {
+      selectedQuestions.push(extraUnseenAvailable[i]);
+    }
+  }
+
+  // Randomize option placements (if more than 2 options exist) to increase variety
+  let finalQuestions = selectedQuestions.map((q) => {
     let aq = { ...q };
     if (aq.options && aq.options.length > 2) {
-      if (currentCompetence < 0.75) {
-        aq.options = [aq.answer, ...aq.options.filter(o => o !== aq.answer).slice(0, 2)].sort(() => Math.random() - 0.5);
-      } else if (currentCompetence > 1.3 && aq.options.length === 3) {
-        aq.options = [...aq.options].sort(() => Math.random() - 0.5);
-      }
+      aq.options = [...aq.options].sort(() => Math.random() - 0.5);
     }
     return aq;
   });
 
-  finalQuestions.push(...adaptedStarting);
-
-  const shuffledReviews = [...possibleReviews].sort(() => Math.random() - 0.5);
-  const shuffledFragile = [...possibleFragile].sort(() => Math.random() - 0.5);
-  const shuffledSims = [...otherSims].sort(() => Math.random() - 0.5);
-
-  let reviewIdx = 0;
-  let fragileIdx = 0;
-  let simIdx = 0;
-
-  while (finalQuestions.length < actualTargetLength) {
-    let addedAny = false;
-
-    if (reviewIdx < shuffledReviews.length && finalQuestions.length < actualTargetLength) {
-      const item = shuffledReviews[reviewIdx++];
-      finalQuestions.unshift({
-        ...item.q,
-        isInjectedReview: true,
-        originalLessonId: item.lesson.id,
-        originalLessonTitle: item.lesson.title,
-        originalCourseName: item.courseName,
-        question: `🧠 [RÉVISION PLANIFIÉE] ${item.q.question}`
-      });
-      addedAny = true;
-    }
-
-    if (fragileIdx < shuffledFragile.length && finalQuestions.length < actualTargetLength) {
-      const item = shuffledFragile[fragileIdx++];
-      finalQuestions.push({
-        ...item.q,
-        isInjectedReview: true,
-        originalLessonId: item.lesson.id,
-        originalLessonTitle: item.lesson.title,
-        originalCourseName: item.courseName,
-        question: item.q.question
-      });
-      addedAny = true;
-    }
-
-    if (simIdx < shuffledSims.length && finalQuestions.length < actualTargetLength) {
-      const item = shuffledSims[simIdx++];
-      finalQuestions.push({
-        ...item.q,
-        isInjectedReview: true,
-        originalLessonId: item.lesson.id,
-        originalLessonTitle: item.lesson.title,
-        originalCourseName: item.courseName,
-        question: item.q.question
-      });
-      addedAny = true;
-    }
-
-    if (!addedAny) break;
-  }
-
-  // Remove duplicates
-  const seenQ = new Set<string>();
-  finalQuestions = finalQuestions.filter((q) => {
-    if (seenQ.has(q.question)) return false;
-    seenQ.add(q.question);
-    return true;
-  });
-
-  // Stagger questions so that similar concepts and formats are separated
+  // Ensure similar formats/types and similar phrasings are not consecutive
   finalQuestions = staggerQuestions(finalQuestions);
 
   return finalQuestions;
