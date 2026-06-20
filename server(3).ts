@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -924,9 +923,10 @@ app.post("/api/generate-learning-path", async (req, res) => {
   }
 });
 
-// Serve static assets out of the client app
+// ✅ Dans la fonction initServer(), remplace :
 async function initServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite"); // import dynamique
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
