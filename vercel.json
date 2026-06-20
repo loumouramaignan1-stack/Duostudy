@@ -2,17 +2,12 @@
   "version": 2,
   "functions": {
     "api/index.ts": {
+      "runtime": "@vercel/node@5",
       "includeFiles": "dist/**"
     }
   },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
