@@ -871,11 +871,11 @@ app.post("/api/generate-learning-path", async (req, res) => {
 
         // On failure, cycle through the best available models
         if (currentModel === "gemini-2.5-flash") {
-          currentModel = "gemini-1.5-flash";
+          currentModel = "gemini-2.5-flash";
           console.log(`Encountered error on gemini-2.5-flash. Switching to model ${currentModel} for next attempt.`);
-        } else if (currentModel === "gemini-1.5-flash") {
-          currentModel = "gemini-1.5-flash";
-          console.log(`Encountered error on gemini-1.5-flash. Retrying check...`);
+        } else if (currentModel === "gemini-2.5-flash") {
+          currentModel = "gemini-2.5-flash";
+          console.log(`Encountered error on gemini-2.5-flash. Retrying check...`);
         } else {
           console.log(`Retrying with ${currentModel}...`);
         }
