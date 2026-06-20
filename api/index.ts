@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -48,6 +49,7 @@ async function parseFile(name: string, base64Data: string, mimeType: string): Pr
       
       const pdfParser = getModuleExports(pdfParserRaw);
       
+      // 1. Try PDFParse Class constructor if exported
       if (pdfParser && typeof pdfParser.PDFParse === "function") {
         try {
           const parser = new pdfParser.PDFParse(new Uint8Array(buffer));
@@ -72,6 +74,7 @@ async function parseFile(name: string, base64Data: string, mimeType: string): Pr
         }
       }
 
+      // 2. Fallback: Check if we have a callable function
       let pdfCallable: any = null;
       if (typeof pdfParser === "function") {
         pdfCallable = pdfParser;
@@ -125,6 +128,7 @@ async function parseFile(name: string, base64Data: string, mimeType: string): Pr
         throw new Error("No parseOffice function available in officeparser exports.");
       }
 
+      // Since the callback is structured as (data, err) we resolve accordingly
       return new Promise<string>((resolve, reject) => {
         try {
           parserObj.parseOffice(tempFilePath, (data: any, err: any) => {
@@ -145,6 +149,7 @@ async function parseFile(name: string, base64Data: string, mimeType: string): Pr
         }
       });
     } else {
+      // Return plain text
       return buffer.toString("utf-8");
     }
   } catch (err) {
@@ -161,6 +166,7 @@ async function parseFile(name: string, base64Data: string, mimeType: string): Pr
   }
 }
 
+// API endpoint to parse a file (e.g. PowerPoint slides .pptx, PDFs, Word docs) and return raw content
 app.post("/api/parse-file", async (req, res) => {
   try {
     const { name, base64, mimeType } = req.body;
@@ -175,12 +181,13 @@ app.post("/api/parse-file", async (req, res) => {
   }
 });
 
+// Lazy initializer for Gemini Client
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {
   if (!aiClient) {
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
-      console.warn("⚠️ Warning: GEMINI_API_KEY is not defined in the environment.");
+      console.warn("⚠️ Warning: GEMINI_API_KEY is not defined in the environment. Please configure it in your Secrets.");
     }
     aiClient = new GoogleGenAI({
       apiKey: key || "MOCK_KEY",
@@ -272,6 +279,7 @@ function generateFallbackSyllabus(courseTitle: string, courseNotes: string, star
     sentences.push(...parts);
   }
 
+  // Predefined rich statements to guarantee plenty of questions across all 3 units and 9 lessons
   const basePredefined = [
     "Les bases fondamentales de votre matière doivent être régulièrement révisées.",
     "La méthode des J (révision espacée) repose sur la répétition à des intervalles optimisés.",
@@ -288,6 +296,7 @@ function generateFallbackSyllabus(courseTitle: string, courseNotes: string, star
   ];
 
   const fallbackSentences = sentences.length >= 12 ? sentences : [...sentences, ...basePredefined.slice(0, 12 - sentences.length)];
+
   const name = courseTitle || "Mon Cours IA";
 
   const units = [
@@ -296,9 +305,27 @@ function generateFallbackSyllabus(courseTitle: string, courseNotes: string, star
       title: `Unité ${startUnitNumber} : Fondements et Terminologie de ${name}`,
       description: "Apprentissage accéléré des notions et définitions principales.",
       lessons: [
-        { id: `fallback-u${startUnitNumber}-l1-${Date.now()}`, title: "Introduction et Concepts de base", type: "vocab" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(0, 2)) },
-        { id: `fallback-u${startUnitNumber}-l2-${Date.now()}`, title: "Évaluation de rappel direct", type: "quiz" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(2, 4)) },
-        { id: `fallback-u${startUnitNumber}-l3-${Date.now()}`, title: "Ancrage des notions", type: "flashcard" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(4, 5)) }
+        {
+          id: `fallback-u${startUnitNumber}-l1-${Date.now()}`,
+          title: "Introduction et Concepts de base",
+          type: "vocab" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(0, 2))
+        },
+        {
+          id: `fallback-u${startUnitNumber}-l2-${Date.now()}`,
+          title: "Évaluation de rappel direct",
+          type: "quiz" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(2, 4))
+        },
+        {
+          id: `fallback-u${startUnitNumber}-l3-${Date.now()}`,
+          title: "Ancrage des notions",
+          type: "flashcard" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(4, 5))
+        }
       ]
     },
     {
@@ -306,49 +333,105 @@ function generateFallbackSyllabus(courseTitle: string, courseNotes: string, star
       title: `Unité ${startUnitNumber + 1} : Analyse et Rapprochements d'idées`,
       description: "Assimilation progressive et maîtrise complète sur le long terme.",
       lessons: [
-        { id: `fallback-u${startUnitNumber + 1}-l1-${Date.now()}`, title: "Fiches de mémorisation", type: "vocab" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(5, 7)) },
-        { id: `fallback-u${startUnitNumber + 1}-l2-${Date.now()}`, title: "Quiz général de consolidation", type: "quiz" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(7, 9)) },
-        { id: `fallback-u${startUnitNumber + 1}-l3-${Date.now()}`, title: "Modèle de mise en situation", type: "flashcard" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(9, 10)) }
+        {
+          id: `fallback-u${startUnitNumber + 1}-l1-${Date.now()}`,
+          title: "Fiches de mémorisation",
+          type: "vocab" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(5, 7))
+        },
+        {
+          id: `fallback-u${startUnitNumber + 1}-l2-${Date.now()}`,
+          title: "Quiz général de consolidation",
+          type: "quiz" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(7, 9))
+        },
+        {
+          id: `fallback-u${startUnitNumber + 1}-l3-${Date.now()}`,
+          title: "Modèle de mise en situation",
+          type: "flashcard" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(9, 10))
+        }
       ]
     },
     {
       unitNumber: startUnitNumber + 2,
-      title: `Unité ${startUnitNumber + 2} : Synthèse et Cas Pratiques`,
+      title: `Unité ${startUnitNumber + 2} : Synthèse et Cas Pratiques Cliniques`,
       description: "Validation finale approfondie des acquis d'examens.",
       lessons: [
-        { id: `fallback-u${startUnitNumber + 2}-l1-${Date.now()}`, title: "Théorie appliquée complexe", type: "vocab" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(10, 11)) },
-        { id: `fallback-u${startUnitNumber + 2}-l2-${Date.now()}`, title: "Quiz de synthèse croisée", type: "quiz" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(11, 12)) },
-        { id: `fallback-u${startUnitNumber + 2}-l3-${Date.now()}`, title: "Validation finale du parcours", type: "flashcard" as const, xp: 15, questions: generateQuestionsForSentences(fallbackSentences.slice(0, 2)) }
+        {
+          id: `fallback-u${startUnitNumber + 2}-l1-${Date.now()}`,
+          title: "Théorie appliquée complexe",
+          type: "vocab" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(10, 11))
+        },
+        {
+          id: `fallback-u${startUnitNumber + 2}-l2-${Date.now()}`,
+          title: "Quiz de synthèse croisée",
+          type: "quiz" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(11, 12))
+        },
+        {
+          id: `fallback-u${startUnitNumber + 2}-l3-${Date.now()}`,
+          title: "Validation finale du parcours",
+          type: "flashcard" as const,
+          xp: 15,
+          questions: generateQuestionsForSentences(fallbackSentences.slice(0, 2))
+        }
       ]
     }
   ];
 
-  return { courseName: name, themeColor: "indigo" as const, units };
+  return {
+    courseName: name,
+    themeColor: "indigo" as const,
+    units
+  };
 }
 
 function parseCleanJSON(text: string): any {
   let cleanText = text.trim();
+  
+  // Remove markdown code block wraps if present
   if (cleanText.startsWith("```")) {
     const lines = cleanText.split("\n");
-    if (lines[0].startsWith("```")) lines.shift();
-    if (lines[lines.length - 1].startsWith("```")) lines.pop();
+    if (lines[0].startsWith("```")) {
+      lines.shift();
+    }
+    if (lines[lines.length - 1].startsWith("```")) {
+      lines.pop();
+    }
     cleanText = lines.join("\n").trim();
   }
+  
+  // Additional safety if there's any prefix/suffix before/after the JSON object
   const startIdx = cleanText.indexOf("{");
   const endIdx = cleanText.lastIndexOf("}");
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
     cleanText = cleanText.substring(startIdx, endIdx + 1);
   }
+  
   return JSON.parse(cleanText);
 }
 
 function repairGeneratedCurriculum(data: any): any {
   if (!data || typeof data !== "object") return data;
-  if (!data.courseName) data.courseName = "Notes de cours";
-  if (!Array.isArray(data.units)) data.units = [];
-
+  
+  if (!data.courseName) {
+    data.courseName = "Notes de cours";
+  }
+  
+  if (!Array.isArray(data.units)) {
+    data.units = [];
+  }
+  
   const courseName = data.courseName;
 
+  // Ensure at least 3 units exist
   if (data.units.length < 3) {
     const startNum = data.units.length > 0 ? (data.units[data.units.length - 1].unitNumber || data.units.length) + 1 : 1;
     for (let u = data.units.length; u < 3; u++) {
@@ -363,6 +446,7 @@ function repairGeneratedCurriculum(data: any): any {
   }
 
   data.units.forEach((unit: any, uIdx: number) => {
+    // Ensure all existing lessons have uniquely prefixed identifiers to avoid collision between courses
     if (Array.isArray(unit.lessons)) {
       const courseSlug = String(courseName || "course").toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 20);
       const repairTimestamp = Date.now();
@@ -374,59 +458,210 @@ function repairGeneratedCurriculum(data: any): any {
       });
     }
 
+    // Resolve if 0 lessons
     if (unit.lessons.length === 0) {
       unit.lessons = [
-        { id: `manual-u${unit.unitNumber || uIdx + 1}-l1-${Date.now()}`, title: "Introduction et Fondements", type: "vocab", xp: 15, questions: [{ type: "true_false", question: `Le sujet traité est essentiel pour maîtriser ${courseName}.`, options: ["Vrai", "Faux"], answer: "Vrai", explanation: "Ce point fait partie des fiches d'étude importantes à acquérir." }] },
-        { id: `manual-u${unit.unitNumber || uIdx + 1}-l2-${Date.now()}`, title: "Quiz d'assimilation", type: "quiz", xp: 15, questions: [{ type: "choice", question: "Quelle méthode active d'entraînement est à privilégier ?", options: ["La répétition espacée active", "La relecture passive répétée", "Ignorer les erreurs", "Le bachotage la veille"], answer: "La répétition espacée active", explanation: "Répéter activement l'effort de rappel renforce considérablement les connexions neuronales." }] },
-        { id: `manual-u${unit.unitNumber || uIdx + 1}-l3-${Date.now()}`, title: "Défis de mémorisation finale", type: "flashcard", xp: 15, questions: [{ type: "true_false", question: "L'apprentissage fractionné sur plusieurs jours est plus efficace que l'apprentissage condensé.", options: ["Vrai", "Faux"], answer: "Vrai", explanation: "La mémoire a besoin de phases de sommeil et de repos pour consolider les notions." }] }
+        {
+          id: `manual-u${unit.unitNumber || uIdx + 1}-l1-${Date.now()}`,
+          title: "Introduction et Fondements",
+          type: "vocab",
+          xp: 15,
+          questions: [
+            {
+              type: "true_false",
+              question: `Le sujet traité est essentiel pour maîtriser ${courseName}.`,
+              options: ["Vrai", "Faux"],
+              answer: "Vrai",
+              explanation: "Ce point fait partie des fiches d'étude importantes à acquérir."
+            }
+          ]
+        },
+        {
+          id: `manual-u${unit.unitNumber || uIdx + 1}-l2-${Date.now()}`,
+          title: "Quiz d'assimilation",
+          type: "quiz",
+          xp: 15,
+          questions: [
+            {
+              type: "choice",
+              question: "Quelle méthode active d'entraînement est à privilégier ?",
+              options: ["La répétition espacée active", "La relecture passive répétée", "Ignorer les erreurs", "Le bachotage la veille"],
+              answer: "La répétition espacée active",
+              explanation: "Répéter activement l'effort de rappel renforce considérablement les connexions neuronales."
+            }
+          ]
+        },
+        {
+          id: `manual-u${unit.unitNumber || uIdx + 1}-l3-${Date.now()}`,
+          title: "Défis de mémorisation finale",
+          type: "flashcard",
+          xp: 15,
+          questions: [
+            {
+              type: "true_false",
+              question: "L'apprentissage fractionné sur plusieurs jours est plus efficace que l'apprentissage condensé.",
+              options: ["Vrai", "Faux"],
+              answer: "Vrai",
+              explanation: "La mémoire a besoin de phases de sommeil et de repos pour consolider les notions."
+            }
+          ]
+        }
       ];
-    } else if (unit.lessons.length === 1) {
+    }
+
+    // Resolve if exactly 1 lesson -> Split/Expand into 3 lessons
+    else if (unit.lessons.length === 1) {
       const originalLesson = unit.lessons[0];
       const questions = originalLesson.questions || [];
+      
       while (questions.length < 3) {
-        questions.push({ type: "true_false", question: `Le concept phare de "${originalLesson.title}" nécessite des révisions régulières.`, options: ["Vrai", "Faux"], answer: "Vrai", explanation: "La régularité est le premier facteur de réussite de votre cursus." });
+        questions.push({
+          type: "true_false",
+          question: `Le concept phare de "${originalLesson.title}" nécessite des révisions régulières.`,
+          options: ["Vrai", "Faux"],
+          answer: "Vrai",
+          explanation: "La régularité est le premier facteur de réussite de votre cursus."
+        });
       }
+      
       const results: any[][] = [[], [], []];
-      questions.forEach((q: any, qIdx: number) => { results[qIdx % 3].push(q); });
+      questions.forEach((q, qIdx) => {
+        results[qIdx % 3].push(q);
+      });
+      
       unit.lessons = [
-        { id: `${originalLesson.id}-p1`, title: `${originalLesson.title} - Fondement`, type: originalLesson.type || "vocab", xp: 15, questions: results[0] },
-        { id: `${originalLesson.id}-p2`, title: `${originalLesson.title} - Pratique`, type: "quiz", xp: 15, questions: results[1] },
-        { id: `${originalLesson.id}-p3`, title: `${originalLesson.title} - Consolidation`, type: "flashcard", xp: 15, questions: results[2] }
+        {
+          id: `${originalLesson.id}-p1`,
+          title: `${originalLesson.title} - Fondement`,
+          type: originalLesson.type || "vocab",
+          xp: 15,
+          questions: results[0]
+        },
+        {
+          id: `${originalLesson.id}-p2`,
+          title: `${originalLesson.title} - Pratique`,
+          type: "quiz",
+          xp: 15,
+          questions: results[1]
+        },
+        {
+          id: `${originalLesson.id}-p3`,
+          title: `${originalLesson.title} - Consolidation`,
+          type: "flashcard",
+          xp: 15,
+          questions: results[2]
+        }
       ];
-    } else if (unit.lessons.length === 2) {
+    }
+
+    // Resolve if exactly 2 lessons -> Split/Expand into 3 lessons
+    else if (unit.lessons.length === 2) {
       const l1 = unit.lessons[0];
       const l2 = unit.lessons[1];
       const l2q = l2.questions || [];
+      
       if (l2q.length >= 2) {
         const mid = Math.floor(l2q.length / 2);
+        const l2q_part1 = l2q.slice(0, mid);
+        const l2q_part2 = l2q.slice(mid);
+        
         unit.lessons = [
           l1,
-          { ...l2, id: `${l2.id}-p1`, title: `${l2.title} - Partie A`, questions: l2q.slice(0, mid) },
-          { ...l2, id: `${l2.id}-p2`, title: `${l2.title} - Partie B`, type: l2.type === "vocab" ? "quiz" : "flashcard", questions: l2q.slice(mid) }
+          {
+            ...l2,
+            id: `${l2.id}-p1`,
+            title: `${l2.title} - Partie A`,
+            questions: l2q_part1
+          },
+          {
+            ...l2,
+            id: `${l2.id}-p2`,
+            title: `${l2.title} - Partie B`,
+            type: l2.type === "vocab" ? "quiz" : "flashcard",
+            questions: l2q_part2
+          }
         ];
       } else {
-        unit.lessons.push({ id: `${l1.id}-extra-${Date.now()}`, title: `${l1.title} - Approfondissement`, type: "flashcard", xp: 15, questions: [{ type: "true_false", question: `La réactivation régulière de ${courseName} aide à lutter contre la courbe de l'oubli.`, options: ["Vrai", "Faux"], answer: "Vrai", explanation: "Prenez de l'avance en consolidant ces concepts maintenant." }] });
+        unit.lessons.push({
+          id: `${l1.id}-extra-${Date.now()}`,
+          title: `${l1.title} - Approfondissement`,
+          type: "flashcard",
+          xp: 15,
+          questions: [
+            {
+              type: "true_false",
+              question: `La réactivation régulière de ${courseName} aide à lutter contre la courbe de l'oubli.`,
+              options: ["Vrai", "Faux"],
+              answer: "Vrai",
+              explanation: "Prenez de l'avance en consolidant ces concepts maintenant."
+            }
+          ]
+        });
       }
     }
 
+    // Repair options inside questions for `choice` or `true_false`
     unit.lessons.forEach((lesson: any) => {
-      if (!Array.isArray(lesson.questions)) lesson.questions = [];
+      if (!Array.isArray(lesson.questions)) {
+        lesson.questions = [];
+      }
+      
       lesson.questions.forEach((q: any) => {
         if (!q.type) q.type = "choice";
         if (!q.question) q.question = "Question d'étude pédagogique";
         if (!q.answer) q.answer = "Réponse correcte";
+        
         const type = q.type;
         const answer = q.answer;
+        
         if (type === "true_false") {
           q.options = ["Vrai", "Faux"];
         } else if (type === "choice") {
+          // If options is empty or lacks incorrect answers, create plausible ones
           if (!Array.isArray(q.options) || q.options.length < 2) {
             const answerClean = String(answer).trim();
-            q.options = [answerClean, `Une autre approche alternative de ${answerClean}`, `L'effet inverse ou l'opposé de ${answerClean}`, `Une mauvaise interprétation courante de ${answerClean}`];
+            let alt1 = `Une autre approche alternative de ${answerClean}`;
+            let alt2 = `L'effet inverse ou l'opposé de ${answerClean}`;
+            let alt3 = `Une mauvaise interprétation courante de ${answerClean}`;
+            
+            // If answer is a date e.g. "20/01/2026", let's make other dates
+            if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(answerClean)) {
+              const years = ["2025", "2026", "2027"];
+              const months = ["01", "02", "06", "12"];
+              const days = ["10", "15", "20", "30"];
+              const randomSelect = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+              
+              alt1 = `${randomSelect(days)}/${randomSelect(months)}/2026`;
+              alt2 = `${randomSelect(days)}/${randomSelect(months)}/2026`;
+              alt3 = `${randomSelect(days)}/${randomSelect(months)}/2026`;
+              
+              while (alt1 === answerClean) alt1 = `15/02/2026`;
+              while (alt2 === answerClean || alt2 === alt1) alt2 = `30/06/2026`;
+              while (alt3 === answerClean || alt3 === alt1 || alt3 === alt2) alt3 = `10/12/2026`;
+            } else if (/^\d+(\.\d+)?%?$/.test(answerClean)) {
+              const isPercent = answerClean.endsWith("%");
+              const numVal = parseFloat(answerClean);
+              if (!isNaN(numVal)) {
+                alt1 = (numVal * 0.8).toFixed(isPercent ? 0 : 1) + (isPercent ? "%" : "");
+                alt2 = (numVal * 1.5).toFixed(isPercent ? 0 : 1) + (isPercent ? "%" : "");
+                alt3 = (numVal * 0.5).toFixed(isPercent ? 0 : 1) + (isPercent ? "%" : "");
+              }
+            } else if (answerClean.toLowerCase() === "oui") {
+              q.options = ["Oui", "Non", "Peut-être"];
+              return;
+            } else if (answerClean.toLowerCase() === "non") {
+              q.options = ["Non", "Oui", "Peut-être"];
+              return;
+            }
+            
+            q.options = [answerClean, alt1, alt2, alt3];
           } else {
+            // Ensure correct answer is contained in options
             const answerClean = String(answer).trim().toLowerCase();
             const hasCorrect = q.options.some((opt: string) => String(opt).trim().toLowerCase() === answerClean);
-            if (!hasCorrect) q.options[0] = answer;
+            if (!hasCorrect) {
+              q.options[0] = answer;
+            }
           }
         } else {
           q.options = [];
@@ -438,6 +673,7 @@ function repairGeneratedCurriculum(data: any): any {
   return data;
 }
 
+// API endpoint to generate a personalized courses structure based on notes
 app.post("/api/generate-learning-path", async (req, res) => {
   const { courseTitle, courseNotes, language = "fr", startUnitNumber = 1 } = req.body;
   try {
@@ -445,6 +681,9 @@ app.post("/api/generate-learning-path", async (req, res) => {
       return res.status(400).json({ error: "Les notes de cours sont requises." });
     }
 
+    const ai = getGeminiClient();
+    
+    // Check if API key is mock (meaning missing)
     if (process.env.GEMINI_API_KEY === undefined || process.env.GEMINI_API_KEY === "MY_GEMINI_API_KEY") {
       return res.status(200).json({
         isMock: true,
@@ -452,12 +691,34 @@ app.post("/api/generate-learning-path", async (req, res) => {
         data: {
           courseName: courseTitle || "Mon Cours IA",
           themeColor: "emerald",
-          units: [{ unitNumber: startUnitNumber, title: `Unité ${startUnitNumber} : Fondements de ` + (courseTitle || "votre cours"), description: "Découvrir les concepts essentiels découlant de vos notes de cours.", lessons: [{ id: `mock-lesson-${startUnitNumber}-1`, title: "Termes et Vocabulaire", type: "vocab", xp: 15, questions: [{ type: "match", question: "Associer le concept à sa description", options: [], answer: "Mode Simulation : Configurez votre clé GEMINI_API_KEY dans l'onglet Secrets pour utiliser la vraie IA.", explanation: "Veuillez configurer la clé API dans les secrets de l'application." }] }] }]
+          units: [
+            {
+              unitNumber: startUnitNumber,
+              title: `Unité ${startUnitNumber} : Fondements de ` + (courseTitle || "votre cours"),
+              description: "Découvrir les concepts essentiels découlant de vos notes de cours.",
+              lessons: [
+                {
+                  id: `mock-lesson-${startUnitNumber}-1`,
+                  title: "Termes et Vocabulaire",
+                  type: "vocab",
+                  xp: 15,
+                  questions: [
+                    {
+                      type: "match",
+                      question: "Associer le concept à sa description",
+                      options: [],
+                      answer: "Mode Simulation : Configurez votre clé GEMINI_API_KEY dans l'onglet Secrets pour utiliser la vraie IA.",
+                      explanation: "Veuillez configurer la clé API dans les secrets de l'application."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       });
     }
 
-    const ai = getGeminiClient();
     const textPrompt = `Veuillez analyser les notes de cours suivantes pour concevoir un programme d'apprentissage complet, progressif et hautement granulaire de style Duolingo.
     
     Titre souhaité : "${courseTitle || "Notes de cours"}"
@@ -471,29 +732,47 @@ app.post("/api/generate-learning-path", async (req, res) => {
     1. IDENTIFICATION DE LA MATIÈRE ET DE LA COMPÉTENCE :
        - Identifiez automatiquement la matière dominante (Mathématiques, Physique, Chimie, Biologie, SVT, Histoire, Géographie, Économie, Philosophie, Droit, Informatique, Médecine, Langues, Psychologie, Sciences politiques, ou Autre).
        - Pour chaque question, déterminez précisément la compétence visée (Mémorisation, Reconnaissance, Compréhension, Comparaison, Analyse, Raisonnement, Application, Résolution de problème, Interprétation, Chronologie, Classification, Détection d'erreur, Argumentation, Synthèse).
+       - Ne proposez JAMAIS de simples QCM superficiels à répétition. Assurez-vous d'avoir une vraie variété d'exercice adaptée aux types ci-dessous.
 
     2. CHOIX ET STRATÉGIE PAR TYPE D'EXERCICE :
-       - 'choice' : 4 options homogènes et hautement plausibles.
-       - 'true_false' : exactement ["Vrai", "Faux"].
-       - 'fill' : réponse courte, options vides [].
-       - 'match' : terme clé → définition, options vides [].
+       - 'choice' (Choix multiple conceptuel) : À utiliser pour l'analyse, l'interprétation, la comparaison ou la sélection d'une étape suivante. DOIT ABSOLUMENT contenir 4 options homogènes et hautement plausibles.
+       - 'true_false' (Vrai/Faux subtil ou piégeux) : À utiliser pour déjouer des erreurs fréquentes de compréhension ou pour valider des propositions subtiles. DOIT contenir exactement 2 options: ["Vrai", "Faux"].
+       - 'fill' (Texte lacunaire ou court problème) : À utiliser pour l'application d'un terme clé, un résultat évident d'un raisonnement court ou une définition sémantique. La réponse attendue doit être un mot ou un groupe de mots très court (maximum 2-3 mots). DOIT contenir un tableau d'options vide: [].
+       - 'match' (Flashcard d'association Concept-Définition) : Le champ 'question' contient le terme clé, la 'answer' contient sa définition. DOIT contenir un tableau d'options vide: [].
 
-    3. EXIGENCES DE QUALITÉ ABSOLUES POUR LES QCM :
-       - Jamais de distracteurs absurdes ou évidents.
-       - Questions directes et techniques, 100% contextualisées.
-       - Toutes les options de longueur similaire.
+    3. EXIGENCES DE QUALITÉ ABSOLUES POUR LES QCM et OPTIONS ('choice') :
+       - INTERDICTIONS :
+         * La bonne réponse ne doit JAMAIS être identifiable grâce à sa longueur ou son degré de détail supérieur.
+         * Les distracteurs ne doivent jamais être absurdes, drôles, vides, ou évidents à éliminer. Ne générez JAMAIS d'option vide ou de valeur inutile comme 'Autre option incorrecte'.
+         * Évitez tout indice grammatical involontaire dans l'énoncé.
+         * NE générez JAMAIS d'énoncés méta-textuels génériques ou paresseux comme « Laquelle de ces propositions concorde le mieux avec vos fiches de révision ? », « D'après vos fiches de révision / diapositives... » ou « Exploration de cours : est-il vrai que ». Chaque question doit être une vraie question directe et technique de cours, 100% contextualisée d'après la notion enseignée (par exemple : « Quel mécanisme permet d'assurer la divulgation nulle ? », « Dans quel cas de figure applique-t-on le concept X ? » ou « Quelle affirmation concernant la structure de Y est exacte ? »).
+       - OBLIGATIONS :
+         * Posez de vraies questions et exercices personnalisés au sujet direct du cours plutôt que des formulations génériques d'évaluation.
+         * Toutes les propositions d'options doivent avoir une longueur similaire.
+         * Toutes les propositions doivent sembler extrêmement plausibles à un élève n'ayant pas assimilé la notion (erreurs fréquentes, confusion de termes voisins).
+         * Une seule proposition doit être scientifiquement/pédagogiquement correcte.
 
     4. DECOUPAGE ATOMIQUE SANS SAUT DE DIFFICULTÉ :
-       - Au moins 3 unités, au moins 3 leçons par unité.
-       - 20 à 25 questions par leçon, formats variés.
-       - Numérotez la première unité avec le numéro : ${startUnitNumber}.
+       - Ne jamais résumer excessivement le cours. Préserver l'intégralité du contenu pédagogique original en identifiant et couvrant 100% de ses concepts (générez autant d'unités/nodes que nécessaire par rapport aux notes).
+       - Décomposer les connaissances en micro-compétences de niveau atomique : chaque leçon (learning node) enseigne UNE seule idée ou concept très précis.
+       - Aucun saut de difficulté : respecter rigoureusement l'ordre de dépendance des concepts.
+       - Chaque unité/section d'apprentissage doit impérativement se terminer par un Checkpoint d'évaluation (Quiz de fin d'unité).
 
-    Répondez uniquement en JSON valide avec la structure demandée. Tout le contenu en français.`;
+    Format de réponse JSON requis :
+    1. Structurez le cours en unités (Units) progressives et cohérentes d'après le cours.
+    2. Numérotez impérativement la première unité générée avec le numéro : ${startUnitNumber}. Les unités suivantes doivent être incrémentées séquentiellement (${startUnitNumber + 1}, ${startUnitNumber + 2}, ...).
+    3. Chaque cours doit impérativement comporter au moins 3 unités (Units) distinctes, et chaque unité doit obligatoirement comporter au moins 3 leçons (Lessons) spécifiques pour que la progression soit longue et complète.
+    4. Chaque leçon (Learning Node) doit comporter une banque d'exercices complète contenant EXACTEMENT 15 questions variées (ni plus, ni moins, 15 questions impérativement), de formulations reformulées sous des angles diversifiés, proposant des exercices différents pour des notions similaires sous des formats de typologie multiples ('choice', 'true_false', 'fill', 'match') pour ne pas lasser l'élève. Chaque question doit comporter une explication chaleureuse et pédagogique.
+    5. ÉVITEZ AU MAXIMUM les indices évidents comme les mots "uniquement" ou "exclusivement" dans les questions ou choix de réponses fausses (qui facilitent trop de savoir que la réponse est 'non'). Les distracteurs d'évaluation doivent être subtils.
+    6. Utilisez l'exercice des cartes à retourner (type 'flashcard') UNIQUEMENT pour les définitions conceptuelles clés ou les dates historiques précises, en indiquant clairement dans la question l'attente (ex: 'Donnez la définition attendue pour...' ou 'Donnez la date attendue pour...').
+    7. Pour chaque leçon (Learning Node), déterminez son 'targetLevel' (nombre de niveaux cibles de 2 à 4). Si les notes de cours fournissent peu d'informations ou si le nœud est simple, baissez impérativement le niveau de ce nœud à 2 ou 3 (au lieu de 4). Le nombre de niveaux doit dépendre strictement de la complexité ou de la richesse des informations du cours par rapport à ce nœud. Spécifiez-le dans le champ 'targetLevel'.
+    8. Rédigez l'ensemble des contenus, questions, explications motivantes et titres en français, avec clarté d'esprit et rigueur scientifique.
+    9. Choisissez une couleur thématique appropriée pour ce cours parmi 'emerald', 'sky', 'rose', 'amber', 'indigo', 'violet'.`;
 
     let response;
     let attempts = 0;
     const maxAttempts = 3;
-    const currentModel = "gemini-2.0-flash";
+    let currentModel = "gemini-2.5-flash";
 
     while (attempts < maxAttempts) {
       try {
@@ -502,40 +781,54 @@ app.post("/api/generate-learning-path", async (req, res) => {
           model: currentModel,
           contents: textPrompt,
           config: {
-            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique et en conception de parcours d'apprentissage gamifiés interactifs. Répondez uniquement avec du JSON valide, sans markdown, sans backticks.",
+            systemInstruction: "Vous êtes un expert mondial en ingénierie pédagogique, en sciences cognitives, en conception d'évaluations de haut niveau et en conception de parcours d'apprentissage gamifiés interactifs. Votre mission absolue est de décomposer les connaissances de cours fournies en micro-compétences de niveau atomique (un nœud = une seule idée utile), sans aucun saut de difficulté, en appliquant des stratégies d'évaluation variées et ludiques du style de Duolingo, avec impérativement au minimum 3 unités, et au moins 3 leçons distinctes par unité (section). Chaque leçon doit impérativement disposer d'une banque d'exercices complète contenant EXACTEMENT 15 questions variées. Évitez absolument d'inclure le terme trop facile d'exclusion 'uniquement' ou 'exclusivement' dans les questions et choix. Ne concevez de flashcards que pour des définitions clés ou des dates marquantes en spécifiant ce qui est attendu. Chaque leçon (node) doit également spécifier un 'targetLevel' (nombre de niveaux de 2 à 4, e.g. 2, 3 ou 4) selon sa complexité ou la quantité d'informations fournies pour ce concept. Chaque question doit de plus avoir son tableau d'options correctement rempli et valide en fonction de son type. Interdiction absolue de formuler des questions méta-génériques. Posez des questions concrètes, directes et techniques adaptées précisément au sujet.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
               properties: {
                 courseName: { type: Type.STRING },
-                themeColor: { type: Type.STRING },
+                themeColor: { 
+                  type: Type.STRING, 
+                  description: "Une classe de couleur Tailwind parmi 'emerald', 'sky', 'rose', 'amber', 'indigo', 'violet'" 
+                },
                 units: {
                   type: Type.ARRAY,
+                  description: "Liste d'unités d'apprentissage progressives (au moins 3 unités), chacune ayant obligatoirement au moins 3 leçons distinctes.",
                   items: {
                     type: Type.OBJECT,
                     properties: {
                       unitNumber: { type: Type.INTEGER },
-                      title: { type: Type.STRING },
-                      description: { type: Type.STRING },
+                      title: { type: Type.STRING, description: "Titre de l'unité, ex: 'Unité 1 : Les bases cardiaques'" },
+                      description: { type: Type.STRING, description: "Objectif court, ex: 'Comprendre la structure anatomique générale'" },
                       lessons: {
                         type: Type.ARRAY,
+                        description: "Chaque unité d'apprentissage doit contenir au minimum 3 leçons distinctes.",
                         items: {
                           type: Type.OBJECT,
                           properties: {
-                            id: { type: Type.STRING },
-                            title: { type: Type.STRING },
-                            type: { type: Type.STRING },
-                            xp: { type: Type.INTEGER },
+                            id: { type: Type.STRING, description: "Identifiant unique de la leçon" },
+                            title: { type: Type.STRING, description: "Titre court, ex: 'Anatomie du coeur'" },
+                            type: { type: Type.STRING, description: "Type de leçon: 'vocab' ou 'quiz' ou 'flashcard'" },
+                            xp: { type: Type.INTEGER, description: "Nombre de points d'expérience gagnés, ex: 15" },
+                            targetLevel: { type: Type.INTEGER, description: "Nombre de niveaux cibles (de 2 à 4). Utilisez 2 ou 3 si le concept is simple ou manque d'infos dans les notes." },
                             questions: {
                               type: Type.ARRAY,
+                              description: "Une banque d'exercices contenant EXACTEMENT 15 questions (ni plus, ni moins) aux angles variés. Éviter d'utiliser des mots indices comme 'uniquement'. Utiliser le format flashcard uniquement pour des définitions ou dates en précisant l'attente.",
                               items: {
                                 type: Type.OBJECT,
                                 properties: {
-                                  type: { type: Type.STRING },
+                                  type: { 
+                                    type: Type.STRING, 
+                                    description: "Type de question parmi: 'choice', 'true_false', 'fill', 'match'" 
+                                  },
                                   question: { type: Type.STRING },
-                                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                  answer: { type: Type.STRING },
-                                  explanation: { type: Type.STRING }
+                                  options: { 
+                                    type: Type.ARRAY, 
+                                    items: { type: Type.STRING },
+                                    description: "Requis pour 'choice' (doit contenir au moins 4 choix plausibles dont la bonne réponse) et 'true_false' (doit contenir ['Vrai', 'Faux']). Doit valoir [] pour 'fill' et 'match'."
+                                  },
+                                  answer: { type: Type.STRING, description: "La bonne réponse correspondante." },
+                                  explanation: { type: Type.STRING, description: "Explication de la réponse, chaleureuse et instructive" }
                                 },
                                 required: ["type", "question", "options", "answer", "explanation"]
                               }
@@ -561,29 +854,57 @@ app.post("/api/generate-learning-path", async (req, res) => {
       } catch (err: any) {
         attempts++;
         console.error(`Attempt ${attempts} failed with error:`, err);
+        
+        // Fast-fail on API key errors to avoid holding slot and hitting serverless timeouts
         const errMsg = String(err.message || "").toLowerCase();
-        if (errMsg.includes("key_invalid") || errMsg.includes("api key") || err.status === 400) {
-          console.warn("Permanent API key error. Falling back instantly.");
+        if (
+          errMsg.includes("key_invalid") || 
+          errMsg.includes("not valid") || 
+          errMsg.includes("invalid key") || 
+          errMsg.includes("api key") || 
+          err.status === 400 || 
+          err.statusCode === 400
+        ) {
+          console.warn("Permanent API key error detected. Skipping retries and falling back instantly.");
           throw err;
         }
-        if (attempts >= maxAttempts) throw err;
-        const delayMs = attempts * 1500;
+
+        if (attempts >= maxAttempts) {
+          throw err;
+        }
+
+        // On failure, cycle through the best available models
+        if (currentModel === "gemini-2.5-flash") {
+          currentModel = "gemini-2.0-flash";
+          console.log(`Encountered error on gemini-2.5-flash. Switching to model ${currentModel} for next attempt.`);
+        } else if (currentModel === "gemini-2.0-flash") {
+          currentModel = "gemini-2.0-flash";
+          console.log(`Encountered error on gemini-1.5-flash. Retrying check...`);
+        } else {
+          console.log(`Retrying with ${currentModel}...`);
+        }
+
+        const delayMs = attempts * 1000;
         console.log(`Waiting ${delayMs}ms before retrying...`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
 
     const resultText = response?.text;
-    if (!resultText) throw new Error("Aucune réponse générée par l'IA.");
+    if (!resultText) {
+      throw new Error("Aucune réponse générée par l'IA.");
+    }
 
     let data;
     try {
       data = parseCleanJSON(resultText);
     } catch (parseErr: any) {
+      console.warn("Direct JSON.parse failed. Retrying with loose regex JSON extraction...", parseErr);
       const jsonStart = resultText.indexOf("{");
       const jsonEnd = resultText.lastIndexOf("}");
       if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-        data = JSON.parse(resultText.substring(jsonStart, jsonEnd + 1));
+        const extracted = resultText.substring(jsonStart, jsonEnd + 1);
+        data = JSON.parse(extracted);
       } else {
         throw parseErr;
       }
@@ -592,10 +913,14 @@ app.post("/api/generate-learning-path", async (req, res) => {
     return res.json({ success: true, data });
 
   } catch (error: any) {
-    console.error("Gemini failed, using fallback syllabus generator:", error);
+    console.error("Gemini failed, proceeding with direct local fallback syllabus generator:", error);
     try {
       const fallbackData = generateFallbackSyllabus(courseTitle, courseNotes, startUnitNumber);
-      return res.json({ success: true, isFallback: true, data: fallbackData });
+      return res.json({ 
+        success: true, 
+        isFallback: true, 
+        data: fallbackData 
+      });
     } catch (fallbackErr: any) {
       console.error("Fatal: Fallback builder also failed:", fallbackErr);
       return res.status(500).json({ error: "Impossible de générer le cours de révision." });
@@ -603,19 +928,30 @@ app.post("/api/generate-learning-path", async (req, res) => {
   }
 });
 
-// Serve static assets in production
-if (process.env.NODE_ENV === "production" && process.env.VERCEL !== "1") {
-  const distPath = path.join(process.cwd(), "dist");
-  app.use(express.static(distPath));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(distPath, "index.html"));
+// Serve static assets out of the client app
+async function initServer() {
+  if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[ExamSprint Web Server] running on http://localhost:${PORT}`);
   });
 }
 
 if (process.env.VERCEL !== "1") {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[DuoStudy Server] running on http://localhost:${PORT}`);
-  });
+  initServer();
 }
 
 export default app;
