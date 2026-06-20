@@ -129,7 +129,7 @@ export default function ActiveLesson({
     setIsCorrect(correct);
     setIsAnswered(true);
 
-    const qId = getQuestionId(currentQuestion, lesson.id);
+    const qId = getQuestionId(currentQuestion);
     setQuestionFirstTryResults((prev) => {
       if (prev[qId]) return prev;
       return {
@@ -441,8 +441,8 @@ export default function ActiveLesson({
           {/* Small theme guide banner */}
           <div className="mb-4 text-center">
             {currentQuestion.isInjectedReview ? (
-              <span className="bg-violet-100 text-violet-700 text-[10px] font-black uppercase px-3.5 py-1.5 rounded-full border-2 border-violet-300 animate-pulse inline-block max-w-full text-center break-words whitespace-normal">
-                🧠 NEURO-RAPPEL SPIRALE &bull; Notion d'étude ({currentQuestion.originalCourseName || "Économie"})
+              <span className="bg-[#DDF4FF] text-[#1CB0F6] text-[10px] font-black uppercase px-3.5 py-1.5 rounded-full border-2 border-slate-200 inline-block max-w-full text-center break-words whitespace-normal">
+                RAPPEL DE NOTION &bull; {currentQuestion.originalCourseName || "Révision"}
               </span>
             ) : (
               <span className="bg-[#DDF4FF] text-[#1CB0F6] text-[10px] font-black uppercase px-4 py-1.5 rounded-full border-2 border-slate-200 inline-block max-w-full text-center break-words whitespace-normal">

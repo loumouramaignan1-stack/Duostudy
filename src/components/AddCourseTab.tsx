@@ -10,6 +10,7 @@ interface AddCourseTabProps {
   onSetCourseActive: (courseId: string) => void;
   availableCourses: Course[];
   activeCourseId: string;
+  onDeleteCourse?: (courseId: string) => void;
 }
 
 export default function AddCourseTab({
@@ -17,7 +18,8 @@ export default function AddCourseTab({
   onAppendUnitsToCourse,
   onSetCourseActive,
   availableCourses,
-  activeCourseId
+  activeCourseId,
+  onDeleteCourse
 }: AddCourseTabProps) {
   const [mode, setMode] = useState<"new" | "append">("new");
   const [selectedCourseIdToAppend, setSelectedCourseIdToAppend] = useState<string>("");
@@ -686,11 +688,27 @@ export default function AddCourseTab({
                       <div className="text-[9px] text-slate-500 font-bold capitalize truncate">Thème {c.themeColor}</div>
                     </div>
                   </div>
-                  {isActive && (
-                    <span className="text-[10px] font-black uppercase text-[#1CB0F6] shrink-0 bg-white/60 px-2 py-0.5 rounded-lg border border-[#84D8FF]/30">
-                      ACTIF ★
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isActive && (
+                      <span className="text-[10px] font-black uppercase text-[#1CB0F6] bg-white/60 px-2 py-0.5 rounded-lg border border-[#84D8FF]/30 select-none">
+                        ACTIF ★
+                      </span>
+                    )}
+                    {onDeleteCourse && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Voulez-vous vraiment supprimer définitivement tout le chemin d'étude "${c.courseName}" ? Cette action effacera toute votre progression associée.`)) {
+                            onDeleteCourse(c.id);
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-300/50 rounded-lg transition-colors select-none cursor-pointer active:scale-95"
+                        title="Supprimer ce chemin d'étude"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

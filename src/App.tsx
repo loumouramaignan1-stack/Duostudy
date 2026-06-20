@@ -16,7 +16,7 @@ import { initGA4, logGA4PageView, setGA4UserContext } from "./utils/analytics";
 
 import { Course, Lesson, Question, UserProgress, LeaderboardUser, ShopItem, SpacedRepetitionData } from "./types";
 import { DEFAULT_COURSES, INITIAL_LEADERBOARD, INITIAL_SHOP, calculateSM2, getAdaptationForLevel } from "./data";
-import { updateNodeState, getBestNextActivity, buildDynamicSessionQuestions, calculateUserCompetenceRating } from "./utils/pedagogy";
+import { updateNodeState, getBestNextActivity, buildDynamicSessionQuestions, calculateUserCompetenceRating, getLessonTargetLevel } from "./utils/pedagogy";
 import { Menu, X, Gem, Heart, Trophy, BookOpen } from "lucide-react";
 
 import { auth, db, handleFirestoreError, OperationType } from "./firebase";
@@ -589,7 +589,15 @@ export default function App() {
 
       // Compute lesson levels update
       const currentLevel = prev.lessonLevels?.[srsUpdated.lessonId] ?? (prev.completedLessons.includes(srsUpdated.lessonId) ? 1 : 0);
-      const nextLevel = Math.min(4, currentLevel + 1);
+      
+      // Get dynamic lesson target level
+      let targetLevel = 4;
+      const foundLesson = courses.flatMap(c => c.units).flatMap(u => u.lessons).find(l => l.id === srsUpdated.lessonId);
+      if (foundLesson) {
+        targetLevel = getLessonTargetLevel(foundLesson);
+      }
+      
+      const nextLevel = Math.min(targetLevel, currentLevel + 1);
       const newLevels = {
         ...(prev.lessonLevels || {}),
         [srsUpdated.lessonId]: nextLevel
@@ -738,6 +746,56 @@ export default function App() {
     setCourses((prev) => [newCourse, ...prev]);
     setActiveCourseId(newCourse.id);
     setActiveTab("learn");
+  };
+
+  const handleDeleteLesson = (lessonId: string) => {
+    // 1. Remove lesson from Course structures
+    setCourses((prevCourses) => {
+      return prevCourses.map((course) => {
+        return {
+          ...course,
+          units: course.units.map((unit) => {
+            return {
+              ...unit,
+              lessons: unit.lessons.filter((lesson) => lesson.id !== lessonId)
+            };
+          }).filter((unit) => unit.lessons.length > 0)
+        };
+      });
+    });
+
+    // 2. Clear progress records for this lessonId
+    setUserProgress((prev) => {
+      const nextCompleted = prev.completedLessons.filter((id) => id !== lessonId);
+      const nextLevels = { ...(prev.lessonLevels || {}) };
+      delete nextLevels[lessonId];
+      const nextStates = { ...(prev.nodeStates || {}) };
+      delete nextStates[lessonId];
+      const nextSrs = { ...(prev.spacedRepetition || {}) };
+      delete nextSrs[lessonId];
+
+      return {
+        ...prev,
+        completedLessons: nextCompleted,
+        lessonLevels: nextLevels,
+        nodeStates: nextStates,
+        spacedRepetition: nextSrs
+      };
+    });
+  };
+
+  const handleDeleteCourse = (courseId: string) => {
+    setCourses((prev) => {
+      const remaining = prev.filter((c) => c.id !== courseId);
+      if (activeCourseId === courseId) {
+        if (remaining.length > 0) {
+          setActiveCourseId(remaining[0].id);
+        } else {
+          setActiveCourseId("");
+        }
+      }
+      return remaining;
+    });
   };
 
   const handleAppendUnitsToCourse = (courseId: string, additionalUnits: any[], newSourceNotes?: string) => {
@@ -1088,6 +1146,7 @@ export default function App() {
                   }}
                   mobileMenuOpen={mobileMenuOpen}
                   onSwitchTab={setActiveTab}
+                  onDeleteLesson={handleDeleteLesson}
                 />
                 <AdBlock type="horizontal" />
               </div>
@@ -1100,6 +1159,7 @@ export default function App() {
                 onSetCourseActive={handleSetCourseActive}
                 availableCourses={courses}
                 activeCourseId={activeCourseId}
+                onDeleteCourse={handleDeleteCourse}
               />
             )}
 

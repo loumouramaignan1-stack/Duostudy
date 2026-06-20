@@ -290,7 +290,11 @@ export function getLegacyPrefixedQuestionId(question: Question, lessonId: string
 }
 
 export function getLessonTargetLevel(lesson: Lesson | undefined | null): number {
-  if (!lesson || !lesson.questions || lesson.questions.length === 0) return 4;
+  if (!lesson) return 4;
+  if (lesson.targetLevel !== undefined && lesson.targetLevel >= 2 && lesson.targetLevel <= 4) {
+    return lesson.targetLevel;
+  }
+  if (!lesson.questions || lesson.questions.length === 0) return 4;
   const count = lesson.questions.length;
   if (count <= 4) {
     return 2; // scale to 2 levels (halves) if very few questions
@@ -402,18 +406,60 @@ export function buildDynamicSessionQuestions(
   const unseenPool: Question[] = [];
   const seenPool: { q: Question; lastSeenTime: number; score: number }[] = [];
 
+  // Gather all seen question texts in the entire curriculum
+  const seenQuestionTexts = new Set<string>();
+  if (Array.isArray(courses)) {
+    courses.forEach((course) => {
+      if (Array.isArray(course.units)) {
+        course.units.forEach((unit) => {
+          if (Array.isArray(unit.lessons)) {
+            unit.lessons.forEach((lesson) => {
+              if (Array.isArray(lesson.questions)) {
+                lesson.questions.forEach((q) => {
+                  const qIdGlobal = getQuestionId(q);
+                  const qIdLegacy = getLegacyPrefixedQuestionId(q, lesson.id);
+                  if (userProgress.seenExercises?.[qIdGlobal] || userProgress.seenExercises?.[qIdLegacy]) {
+                    seenQuestionTexts.add((q.question || "").toLowerCase().trim());
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
   poolQuestions.forEach((q) => {
     const qIdGlobal = getQuestionId(q);
     const qIdLegacy = getLegacyPrefixedQuestionId(q, startingLesson.id);
-    const record = userProgress.seenExercises?.[qIdGlobal] || userProgress.seenExercises?.[qIdLegacy];
+    const hasBeenSeenDirectly = !!(userProgress.seenExercises?.[qIdGlobal] || userProgress.seenExercises?.[qIdLegacy]);
     
-    if (!record) {
+    // Check also if extremely similar text was seen elsewhere across other levels/nodes
+    let isTooSimilar = false;
+    if (!hasBeenSeenDirectly && seenQuestionTexts.size > 0) {
+      const qTextClean = (q.question || "").toLowerCase().trim();
+      if (seenQuestionTexts.has(qTextClean)) {
+        isTooSimilar = true;
+      } else {
+        for (const seenText of seenQuestionTexts) {
+          const dummyQ: Question = { question: seenText, type: 'choice', options: [], answer: "", explanation: "" };
+          if (findSimilarityScore(q, dummyQ) > 0.6) {
+            isTooSimilar = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!hasBeenSeenDirectly && !isTooSimilar) {
       unseenPool.push(q);
     } else {
+      const record = userProgress.seenExercises?.[qIdGlobal] || userProgress.seenExercises?.[qIdLegacy];
       seenPool.push({
         q,
-        lastSeenTime: new Date(record.lastSeen || 0).getTime(),
-        score: record.score ?? 0
+        lastSeenTime: record ? new Date(record.lastSeen || 0).getTime() : 0,
+        score: record ? (record.score ?? 0) : 0
       });
     }
   });
@@ -441,21 +487,21 @@ export function buildDynamicSessionQuestions(
     unseenToTake = 0;
   } else {
     // 2. Distribute unseen questions evenly across the remaining levels
-    // while strictly ensuring that at least 70% of the session's exercises are brand new.
+    // while strictly ensuring that at least 80% of the session's exercises are brand new.
     const remainingLevels = Math.max(1, targetLevel - currentLevel);
     const unseenPerLevelIdeal = Math.max(1, Math.ceil(unseenPool.length / remainingLevels));
     
     let targetUnseen = unseenPerLevelIdeal;
-    const calculatedSessionLen = Math.floor(targetUnseen / 0.70);
+    const calculatedSessionLen = Math.floor(targetUnseen / 0.80);
 
     if (calculatedSessionLen < sessionLen) {
-      // Not enough unseen questions left to keep 70% unseen with a full 10-question session,
+      // Not enough unseen questions left to keep 80% unseen with a full 10-question session,
       // so we dynamically adapt the session length to be shorter (at least 5 questions)
       sessionLen = Math.max(5, Math.min(sessionLen, calculatedSessionLen));
-      targetUnseen = Math.min(unseenPool.length, Math.ceil(sessionLen * 0.70));
+      targetUnseen = Math.min(unseenPool.length, Math.ceil(sessionLen * 0.80));
     } else {
       // Plenty of unseen questions! We can do a full session of size sessionLen
-      targetUnseen = Math.min(unseenPool.length, Math.max(Math.ceil(sessionLen * 0.70), targetUnseen));
+      targetUnseen = Math.min(unseenPool.length, Math.max(Math.ceil(sessionLen * 0.80), targetUnseen));
     }
 
     unseenToTake = targetUnseen;

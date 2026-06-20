@@ -18,6 +18,7 @@ export interface Lesson {
   type: 'vocab' | 'quiz' | 'flashcard';
   xp: number;
   questions: Question[];
+  targetLevel?: number;
 }
 
 export interface Unit {
